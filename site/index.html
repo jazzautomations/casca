@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="pt-BR" data-lang="pt" data-theme="dark" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>casca · agentes de código em outros hosts, por ssh + tmux</title>
+<meta name="description" content="casca abre shells e agentes de código (claude, codex, devin…) nas suas outras máquinas, por ssh + tmux, a partir de uma máquina fraca. Um binário Go estático e uma janela GTK3. Código aberto (MIT).">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#242933">
+<link rel="canonical" href="https://casca.jazzautomations.com.br/">
+<link rel="alternate" hreflang="pt-BR" href="https://casca.jazzautomations.com.br/">
+<link rel="alternate" hreflang="en" href="https://casca.jazzautomations.com.br/?lang=en">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="casca">
+<meta property="og:title" content="casca · agentes de código em outros hosts, por ssh + tmux">
+<meta property="og:description" content="Abra claude, codex ou devin nas suas outras máquinas a partir de uma máquina fraca. Um binário Go estático e uma janela GTK3. MIT.">
+<meta property="og:url" content="https://casca.jazzautomations.com.br/">
+<meta property="og:image" content="https://casca.jazzautomations.com.br/assets/screenshot.png">
+<meta property="og:image:alt" content="Janela do casca: hosts e sessões vivas na lateral, e a lista para abrir um agente em cada host.">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/casca.css">
+<script src="/boot.js"></script>
+<script src="/app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main"><span data-l="pt">Pular para o conteúdo</span><span data-l="en" lang="en">Skip to content</span></a>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="#top" aria-label="casca">
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" class="bm-bg"/><path d="M16 22l10 10-10 10" class="bm-chev"/><path d="M34 23h15M34 32h15M34 41h15" class="bm-chev"/></svg>
+      <span class="brand-name">casca</span>
+    </a>
+    <nav class="nav" aria-label="Seções">
+      <a href="#why"><span data-l="pt">Por quê</span><span data-l="en" lang="en">Why</span></a>
+      <a href="#features"><span data-l="pt">Recursos</span><span data-l="en" lang="en">Features</span></a>
+      <a href="#how"><span data-l="pt">Como funciona</span><span data-l="en" lang="en">How it works</span></a>
+      <a href="#limits"><span data-l="pt">Limites</span><span data-l="en" lang="en">Limits</span></a>
+      <a href="https://jazz-cli.jazzautomations.com.br">jazz-cli</a>
+    </nav>
+    <div class="header-tools">
+      <button class="tool-btn lang-btn" type="button" id="lang-toggle" aria-label="Mudar idioma para inglês / Switch language">
+        <span class="lang-opt" data-opt="pt">PT</span><span class="lang-sep" aria-hidden="true">/</span><span class="lang-opt" data-opt="en">EN</span>
+      </button>
+      <button class="tool-btn icon-btn" type="button" id="theme-toggle" aria-label="Alternar tema claro/escuro" aria-pressed="false">
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <a class="tool-btn" href="https://github.com/jazzautomations/casca">GitHub</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero" id="top" aria-labelledby="hero-title">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow mono"><span class="dot-ok" aria-hidden="true"></span>v0.2 · Go · MIT · linux/386</p>
+      <h1 id="hero-title">
+        <span data-l="pt">Seus agentes de código rodam nas máquinas fortes. <em>Você abre de qualquer uma.</em></span>
+        <span data-l="en" lang="en">Your coding agents run on the strong machines. <em>You open them from any one.</em></span>
+      </h1>
+      <p class="lede">
+        <span data-l="pt">O <strong>casca</strong> abre shells e agentes (claude, codex, devin…) nos seus outros hosts, por ssh + tmux. Ele só transporta o terminal: o agente roda lá, dentro de tmux. Fechar a janela ou perder a rede <em>não mata nada</em>.</span>
+        <span data-l="en" lang="en"><strong>casca</strong> opens shells and agents (claude, codex, devin…) on your other hosts, over ssh + tmux. It only carries the terminal: the agent runs over there, inside tmux. Closing the window or losing the network <em>kills nothing</em>.</span>
+      </p>
+
+      <div class="install" id="install">
+        <div class="tabs" role="tablist" aria-label="Instalação">
+          <button role="tab" type="button" id="tab-src" aria-controls="panel-src" aria-selected="true"><span data-l="pt">Do código</span><span data-l="en" lang="en">From source</span></button>
+          <button role="tab" type="button" id="tab-386" aria-controls="panel-386" aria-selected="false" tabindex="-1"><span data-l="pt">Máquina de 32 bits</span><span data-l="en" lang="en">32-bit machine</span></button>
+        </div>
+        <div class="tab-panel" role="tabpanel" id="panel-src" aria-labelledby="tab-src" tabindex="0">
+          <p class="panel-label"><span class="tag tag-ok">Go 1.22+</span></p>
+          <div class="cmd"><pre><code><span class="pr" aria-hidden="true">$ </span>git clone https://github.com/jazzautomations/casca &amp;&amp; cd casca
+<span class="pr" aria-hidden="true">$ </span>go build -o casca . &amp;&amp; ./casca init
+<span class="pr" aria-hidden="true">$ </span>./casca tui</code></pre><button class="copy" type="button" data-copy="git clone https://github.com/jazzautomations/casca &amp;&amp; cd casca
+go build -o casca . &amp;&amp; ./casca init
+./casca tui"><span data-l="pt">copiar</span><span data-l="en" lang="en">copy</span></button></div>
+          <p class="fine"><span data-l="pt">Ainda não há binários prontos para baixar. A janela nativa (<code>gui/casca-gui</code>) pede <code>python3-gi</code>, <code>gir1.2-gtk-3.0</code> e <code>gir1.2-vte-2.91</code>.</span><span data-l="en" lang="en">There are no prebuilt binaries yet. The native window (<code>gui/casca-gui</code>) needs <code>python3-gi</code>, <code>gir1.2-gtk-3.0</code> and <code>gir1.2-vte-2.91</code>.</span></p>
+        </div>
+        <div class="tab-panel" role="tabpanel" id="panel-386" aria-labelledby="tab-386" tabindex="0">
+          <p class="panel-label"><span class="tag tag-ok" data-l="pt">compila numa máquina, roda na outra</span><span class="tag tag-ok" data-l="en" lang="en">build on one machine, run on the other</span></p>
+          <div class="cmd"><pre><code><span class="pr" aria-hidden="true">$ </span>CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -trimpath -ldflags="-s -w" -o casca .
+<span class="pr" aria-hidden="true">$ </span>./deploy/install.sh root@HOST USUARIO</code></pre><button class="copy" type="button" data-copy="CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -trimpath -ldflags=&quot;-s -w&quot; -o casca .
+./deploy/install.sh root@HOST USUARIO"><span data-l="pt">copiar</span><span data-l="en" lang="en">copy</span></button></div>
+          <p class="fine"><span data-l="pt">O <code>install.sh</code> copia o binário e a janela, e cria um serviço runit (testado em antiX).</span><span data-l="en" lang="en"><code>install.sh</code> copies the binary and the window, and creates a runit service (tested on antiX).</span></p>
+        </div>
+      </div>
+    </div>
+
+    <figure class="shot">
+      <img src="/assets/screenshot.png" width="1000" height="676" alt="Janela do casca: à esquerda, um cartão por host com as sessões tmux vivas; à direita, a lista para abrir shell, claude, codex ou devin em cada host.">
+      <figcaption>
+        <span data-l="pt">A janela nativa (GTK3 + VTE), com hosts de demonstração. O desenho da lateral segue o do <a href="https://github.com/stablyai/orca">Orca</a>.</span>
+        <span data-l="en" lang="en">The native window (GTK3 + VTE), with demo hosts. The sidebar layout follows <a href="https://github.com/stablyai/orca">Orca</a>'s.</span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="section" id="why" aria-labelledby="why-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker mono">01 · <span data-l="pt">por quê</span><span data-l="en" lang="en">why</span></p>
+      <h2 id="why-title"><span data-l="pt">O notebook velho não roda o agente. Mas roda um terminal.</span><span data-l="en" lang="en">The old laptop can't run the agent. It can run a terminal.</span></h2>
+    </header>
+    <div class="story-grid">
+      <div class="prose">
+        <p data-l="pt">O casca nasceu no mesmo Dell Latitude D610 do <a href="https://jazz-cli.jazzautomations.com.br">jazz-cli</a>: Pentium M de 32 bits, 2 GB de RAM e um WiFi que cai por minutos. Claude Code, Codex e Devin não rodam ali, mas rodam nas outras máquinas da rede.</p>
+        <p data-l="en" lang="en">casca was born on the same Dell Latitude D610 as <a href="https://jazz-cli.jazzautomations.com.br">jazz-cli</a>: a 32-bit Pentium M, 2 GB of RAM and WiFi that drops for minutes. Claude Code, Codex and Devin don't run there, but they run on the other machines on the network.</p>
+        <p data-l="pt">A ideia veio do <a href="https://termius.com">Termius</a> (hosts salvos, um toque para conectar) e do <a href="https://github.com/stablyai/orca">Orca</a> (ver de relance o que cada agente está fazendo). Nenhum dos dois roda em Linux de 32 bits. O casca faz o pedaço que importa aqui e nada além: escolher o host, abrir o agente, não perder a sessão.</p>
+        <p data-l="en" lang="en">The idea came from <a href="https://termius.com">Termius</a> (saved hosts, one tap to connect) and <a href="https://github.com/stablyai/orca">Orca</a> (seeing at a glance what each agent is doing). Neither runs on 32-bit Linux. casca does the part that matters here and nothing more: pick the host, open the agent, don't lose the session.</p>
+        <p data-l="pt">Não é um substituto de nenhum dos dois. Não tem transferência de arquivos, cofre de chaves nem sincronização; usa o <code>ssh</code> e as chaves que a máquina já tem.</p>
+        <p data-l="en" lang="en">It replaces neither. There is no file transfer, key vault or sync; it uses the <code>ssh</code> and the keys the machine already has.</p>
+      </div>
+      <aside class="spec" aria-labelledby="spec-title">
+        <h3 id="spec-title" class="spec-title mono"><span data-l="pt">medido no Dell</span><span data-l="en" lang="en">measured on the Dell</span></h3>
+        <dl>
+          <div><dt><span data-l="pt">Máquina</span><span data-l="en" lang="en">Machine</span></dt><dd>Dell Latitude D610</dd></div>
+          <div><dt>CPU</dt><dd><span data-l="pt">Pentium M, 32 bits</span><span data-l="en" lang="en">Pentium M, 32-bit</span></dd></div>
+          <div><dt><span data-l="pt">Binário</span><span data-l="en" lang="en">Binary</span></dt><dd><span data-l="pt">6,3 MB, estático</span><span data-l="en" lang="en">6.3 MB, static</span></dd></div>
+          <div><dt><span data-l="pt">Janela aberta</span><span data-l="en" lang="en">Window open</span></dt><dd><span data-l="pt">~68 MB de RAM</span><span data-l="en" lang="en">~68 MB of RAM</span></dd></div>
+          <div><dt><span data-l="pt">Cada sessão</span><span data-l="en" lang="en">Each session</span></dt><dd><span data-l="pt">~7 MB + o ssh</span><span data-l="en" lang="en">~7 MB + ssh</span></dd></div>
+          <div><dt><span data-l="pt">Tela</span><span data-l="en" lang="en">Screen</span></dt><dd>1024 × 768</dd></div>
+        </dl>
+        <p class="spec-note"><span data-l="pt">Medidas de novembro de 2026, com uma sessão aberta.</span><span data-l="en" lang="en">Measured in November 2026, with one session open.</span></p>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="features" aria-labelledby="features-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker mono">02 · <span data-l="pt">o que ele faz</span><span data-l="en" lang="en">what it does</span></p>
+      <h2 id="features-title"><span data-l="pt">Três interfaces, o mesmo motor.</span><span data-l="en" lang="en">Three interfaces, one engine.</span></h2>
+      <p class="sec-lede"><span data-l="pt">Janela nativa, menu no terminal ou navegador. As três rodam o mesmo binário e a mesma reconexão.</span><span data-l="en" lang="en">Native window, terminal menu or browser. All three run the same binary and the same reconnection.</span></p>
+    </header>
+    <ul class="features" role="list">
+      <li class="feat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M12.5 9h5M12.5 13h5"/></svg>
+        <h3><span data-l="pt">Tudo que está vivo, na lateral</span><span data-l="en" lang="en">Everything alive, in the sidebar</span></h3>
+        <p data-l="pt">Um cartão por host e, embaixo, as sessões tmux que existem lá, abertas nesta janela ou não, com o comando em primeiro plano e há quanto tempo saiu texto. Um clique abre.</p>
+        <p data-l="en" lang="en">One card per host and, under it, the tmux sessions that exist there, open in this window or not, with the foreground command and how long ago it printed. One click opens it.</p>
+      </li>
+      <li class="feat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg>
+        <h3><span data-l="pt">A rede cai, a sessão fica</span><span data-l="en" lang="en">The network drops, the session stays</span></h3>
+        <p data-l="pt">Quando o ssh morre, o casca reabre com espera de 1, 2, 4, 8 e 15 s, sem desistir, e só <em>reanexa</em> o tmux: nunca relança o agente sozinho. Erro de autenticação não é repetido.</p>
+        <p data-l="en" lang="en">When ssh dies, casca reopens it with 1, 2, 4, 8 and 15 s waits, never giving up, and only <em>reattaches</em> tmux: it never relaunches the agent by itself. Authentication errors are not retried.</p>
+      </li>
+      <li class="feat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+        <h3><span data-l="pt">Quem está trabalhando</span><span data-l="en" lang="en">Who is working</span></h3>
+        <p data-l="pt">Cada sessão aberta tem um ponto: girando enquanto sai texto, verde quando parou e você ainda não olhou. É uma estimativa pela atividade da tela, não um estado exato do agente.</p>
+        <p data-l="en" lang="en">Each open session has a dot: spinning while text comes out, green when it stopped and you haven't looked yet. It is an estimate from screen activity, not the agent's exact state.</p>
+      </li>
+      <li class="feat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-5-6-5M12 19h8"/></svg>
+        <h3><span data-l="pt">Pelo teclado</span><span data-l="en" lang="en">From the keyboard</span></h3>
+        <p data-l="pt">Em "Nova sessão": setas escolhem host e agente, Enter abre. Ou digite <code>servidor claude</code>. <code>user@host</code> conecta num host que ainda não está cadastrado.</p>
+        <p data-l="en" lang="en">In "New session": arrows pick host and agent, Enter opens. Or type <code>server claude</code>. <code>user@host</code> connects to a host that isn't saved yet.</p>
+      </li>
+      <li class="feat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/></svg>
+        <h3><span data-l="pt">No celular também</span><span data-l="en" lang="en">On the phone too</span></h3>
+        <p data-l="pt"><code>casca serve</code> abre uma interface web (xterm.js) com teclas extras para toque. Escuta só em <code>127.0.0.1</code> e no IP da tailnet, com token; nunca em <code>0.0.0.0</code>.</p>
+        <p data-l="en" lang="en"><code>casca serve</code> opens a web interface (xterm.js) with extra keys for touch. It listens only on <code>127.0.0.1</code> and the tailnet IP, with a token; never on <code>0.0.0.0</code>.</p>
+      </li>
+      <li class="feat">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 4v5c0 4.4-3 8.4-7 9-4-.6-7-4.6-7-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+        <h3><span data-l="pt">Nada novo para confiar</span><span data-l="en" lang="en">Nothing new to trust</span></h3>
+        <p data-l="pt">Sem conta, sem nuvem, sem cofre próprio. O casca chama o <code>ssh</code> do sistema; chaves e <code>known_hosts</code> continuam onde estavam. No host de destino só precisa existir <code>tmux</code>.</p>
+        <p data-l="en" lang="en">No account, no cloud, no vault of its own. casca calls the system <code>ssh</code>; keys and <code>known_hosts</code> stay where they were. The target host only needs <code>tmux</code>.</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="section" id="how" aria-labelledby="how-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker mono">03 · <span data-l="pt">como funciona</span><span data-l="en" lang="en">how it works</span></p>
+      <h2 id="how-title"><span data-l="pt">Um ssh, um tmux, e o comando digitado dentro dele.</span><span data-l="en" lang="en">One ssh, one tmux, and the command typed into it.</span></h2>
+    </header>
+    <div class="prose">
+      <pre class="flow" aria-hidden="true">janela / TUI / navegador ──> casca ──ssh -tt──> host: tmux new-or-attach c-&lt;agente&gt;</pre>
+      <p data-l="pt">Numa sessão nova, o casca cria o tmux com o shell normal do usuário e <em>digita</em> o comando do agente. Assim o agente pega o mesmo <code>PATH</code> que você teria na mão, e sair dele deixa um shell em vez de matar a sessão.</p>
+      <p data-l="en" lang="en">For a new session, casca creates the tmux with the user's normal shell and <em>types</em> the agent command. That way the agent gets the same <code>PATH</code> you'd have by hand, and quitting it leaves a shell instead of killing the session.</p>
+      <p data-l="pt">Hosts que seguram a conexão até uma pessoa aprovar (como o Tailscale SSH em modo <em>check</em>) mostram o link na aba; o casca espera até 10 minutos e só considera a sessão criada depois que o ssh realmente entra.</p>
+      <p data-l="en" lang="en">Hosts that hold the connection until a person approves (such as Tailscale SSH in <em>check</em> mode) show the link in the tab; casca waits up to 10 minutes and only treats the session as created once ssh actually gets in.</p>
+      <p data-l="pt">Os estudos que embasaram o desenho estão no repositório: <a href="https://github.com/jazzautomations/casca/blob/main/docs/research/termius.md">Termius</a>, <a href="https://github.com/jazzautomations/casca/blob/main/docs/research/orca.md">Orca</a> e <a href="https://github.com/jazzautomations/casca/blob/main/docs/research/prior-art.md">trabalhos anteriores</a>.</p>
+      <p data-l="en" lang="en">The studies behind the design are in the repository: <a href="https://github.com/jazzautomations/casca/blob/main/docs/research/termius.md">Termius</a>, <a href="https://github.com/jazzautomations/casca/blob/main/docs/research/orca.md">Orca</a> and <a href="https://github.com/jazzautomations/casca/blob/main/docs/research/prior-art.md">prior art</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="limits" aria-labelledby="limits-title">
+  <div class="wrap">
+    <header class="sec-head">
+      <p class="kicker mono">04 · <span data-l="pt">limites</span><span data-l="en" lang="en">limits</span></p>
+      <h2 id="limits-title"><span data-l="pt">O que ele ainda não faz.</span><span data-l="en" lang="en">What it doesn't do yet.</span></h2>
+      <p class="sec-lede"><span data-l="pt">É um projeto novo (v0.2), feito para uma máquina. Espere arestas.</span><span data-l="en" lang="en">It is a new project (v0.2), built for one machine. Expect rough edges.</span></p>
+    </header>
+    <ol class="roadmap" role="list">
+      <li><span class="rm-n mono">01</span><div><h3><span data-l="pt">Estado exato do agente</span><span data-l="en" lang="en">Exact agent state</span></h3><p data-l="pt">Hoje é atividade na tela mais o sino do terminal. O Orca usa hooks nos agentes para saber "trabalhando / pedindo permissão / terminou"; aqui isso ainda não existe.</p><p data-l="en" lang="en">Today it is screen activity plus the terminal bell. Orca uses agent hooks to know "working / asking permission / done"; that doesn't exist here yet.</p></div></li>
+      <li><span class="rm-n mono">02</span><div><h3><span data-l="pt">Binários prontos</span><span data-l="en" lang="en">Prebuilt binaries</span></h3><p data-l="pt">Por enquanto é compilar do código. A janela nativa só foi usada em Linux com GTK3.</p><p data-l="en" lang="en">For now you build from source. The native window has only been used on Linux with GTK3.</p></div></li>
+      <li><span class="rm-n mono">03</span><div><h3><span data-l="pt">Tela dividida e notificações</span><span data-l="en" lang="en">Split view and notifications</span></h3><p data-l="pt">Uma sessão por aba. Não há painéis lado a lado na janela nativa nem aviso fora da janela quando um agente termina.</p><p data-l="en" lang="en">One session per tab. There are no side-by-side panes in the native window and no notification outside it when an agent finishes.</p></div></li>
+      <li><span class="rm-n mono">04</span><div><h3><span data-l="pt">Arquivos e portas</span><span data-l="en" lang="en">Files and ports</span></h3><p data-l="pt">Sem SFTP e sem redirecionamento de portas. A interface web envia um arquivo por vez para <code>/tmp</code> do host; é só isso.</p><p data-l="en" lang="en">No SFTP and no port forwarding. The web interface uploads one file at a time to the host's <code>/tmp</code>; that is all.</p></div></li>
+    </ol>
+  </div>
+</section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-grid">
+    <div class="f-brand">
+      <p class="brand-name mono">casca</p>
+      <p class="f-made"><span data-l="pt">Feito com agentes de IA sob direção humana.</span><span data-l="en" lang="en">Made with AI agents under human direction.</span></p>
+      <p class="f-meta">© 2026 Jazz Automations · <a href="https://github.com/jazzautomations/casca/blob/main/LICENSE"><span data-l="pt">Licença MIT</span><span data-l="en" lang="en">MIT License</span></a></p>
+    </div>
+    <nav class="f-col" aria-label="Projeto">
+      <p class="f-h mono"><span data-l="pt">projeto</span><span data-l="en" lang="en">project</span></p>
+      <a href="https://github.com/jazzautomations/casca">GitHub</a>
+      <a href="https://github.com/jazzautomations/casca/blob/main/README.md">README</a>
+      <a href="https://jazz-cli.jazzautomations.com.br">jazz-cli</a>
+    </nav>
+    <div class="f-col">
+      <p class="f-h mono"><span data-l="pt">créditos</span><span data-l="en" lang="en">credits</span></p>
+      <p class="f-credits"><span data-l="pt">Terminal web: <a href="https://github.com/xtermjs/xterm.js">xterm.js</a> (MIT). Ideias do <a href="https://termius.com">Termius</a> e do <a href="https://github.com/stablyai/orca">Orca</a>. Estilo da página herdado do site do jazz-cli.</span><span data-l="en" lang="en">Web terminal: <a href="https://github.com/xtermjs/xterm.js">xterm.js</a> (MIT). Ideas from <a href="https://termius.com">Termius</a> and <a href="https://github.com/stablyai/orca">Orca</a>. Page style inherited from the jazz-cli site.</span></p>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
