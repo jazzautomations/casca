@@ -6,6 +6,8 @@ de uma máquina fraca. Um binário Go estático (linux/386, ~6 MB) e uma janela 
 *Open coding agents and shells on your other machines over ssh + tmux, from a weak one. A single static
 Go binary (linux/386) plus an optional GTK3 window. Docs are in Portuguese.*
 
+**Site:** https://casca.jazzautomations.com.br
+
 ![casca](docs/screenshot.png)
 
 Nasceu num Dell D610 (Pentium M, 2 GB, WiFi que cai): o casca só transporta terminal; o agente roda
