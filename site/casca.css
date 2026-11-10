@@ -1,7 +1,0 @@
-/* casca.css: só o que a página do casca tem a mais que o styles.css da família jazz. */
-.shot { margin: 0; min-width: 0; }
-.shot img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line);
-            box-shadow: 0 24px 60px rgba(0, 0, 0, .35); }
-.shot figcaption { margin-top: .9rem; font-size: .82rem; color: var(--muted); }
-.flow { font-family: "JetBrains Mono", monospace; font-size: .88rem; line-height: 1.75; overflow-x: auto; margin: 1.6rem 0 0;
-        padding: 1.1rem 1.3rem; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); white-space: pre; }
