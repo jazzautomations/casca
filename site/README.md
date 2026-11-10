@@ -1,8 +1,7 @@
 # Site do casca
 
 Página estática de https://casca.jazzautomations.com.br. Sem framework e sem build.
-`index.html`, `site.css` e `site.js` são escritos à mão. A janela no topo da página é uma imitação
-em HTML (`site.js`), não um print.
+A página é um man page: `index.html` (português), `en.html` (inglês) e `site.css`. Sem JavaScript.
 
     cd site && python3 -m http.server 8080
 

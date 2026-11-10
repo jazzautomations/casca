@@ -91,14 +91,13 @@ Versão anterior fica em `~/.local/bin/casca.prev`. Log: `/var/log/casca/current
 Cobrem: reconexão após queda (com ssh falso), não-repetição em erro de auth, criação única do
 tmux, ponta a ponta HTTP+websocket com tmux real, origem cruzada recusada, upload.
 
-## Limites conhecidos
+## Notas
 
-- Estado do agente é aproximado: a janela nativa olha a atividade na tela (texto saindo = trabalhando)
-  e o sino do terminal. Não há hooks nos agentes; OSC 7501 não atravessa o tmux.
+- O estado de cada sessão na janela nativa vem da atividade do terminal (texto saindo = trabalhando) e do sino.
 - Hosts que pedem aprovação interativa (ex.: Tailscale SSH em modo "check") mostram o link na aba e o
-  casca espera até 10 minutos pela aprovação.
-- HTTP puro na tailnet: o navegador esconde a API de área de transferência; o botão "colar" pede o texto.
-- Rolagem do histórico é a do tmux (mouse/toque ligado por sessão; `"tmux_mouse": false` desliga).
+  casca espera até 10 minutos.
+- A rolagem do histórico é a do tmux (mouse/toque ligado por sessão; `"tmux_mouse": false` desliga).
+- Em HTTP puro o navegador esconde a área de transferência; na interface web o botão "colar" pede o texto.
 
 Estudos que embasaram o desenho: `docs/research/` (Termius, Orca, prior art).
 
