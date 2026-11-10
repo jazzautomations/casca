@@ -1,0 +1,1276 @@
+#!/usr/bin/env python3
+"""casca-gui: janela nativa (GTK3 + VTE) pra abrir shells e agentes em outros hosts.
+
+Só desenha a interface. Quem fala ssh/tmux e reconecta quando a rede cai é o
+binário `casca` (`casca connect`), que roda dentro de cada aba.
+
+Início: uma lista de hosts, um por linha, com os agentes ao lado (setas escolhem,
+Enter abre). Com sessão aberta, a lateral lista as sessões com o estado de cada
+uma e o terminal ocupa o resto da janela.
+"""
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import threading
+import time
+import warnings
+from concurrent.futures import ThreadPoolExecutor
+
+import gi
+
+gi.require_version("Gdk", "3.0")
+gi.require_version("Gtk", "3.0")
+gi.require_version("Vte", "2.91")
+from gi.repository import Gdk, GLib, Gtk, Pango, Vte  # noqa: E402
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+CONF = os.environ.get("CASCA_CONF") or os.path.join(
+    os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "casca", "config.json")
+STATE = os.path.join(os.path.dirname(CONF), "gui.json")
+SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "casca-gui-%d.sock" % os.getuid())
+
+
+def find_casca():
+    here = os.path.dirname(os.path.realpath(__file__))
+    for c in (os.environ.get("CASCA_BIN"), os.path.join(here, "casca"), os.path.join(here, "..", "casca"),
+              os.path.expanduser("~/.local/bin/casca"), shutil.which("casca")):
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return os.path.realpath(c)
+    return None
+
+
+CASCA = find_casca()
+
+CSS = b"""
+.casca { background: #141414; color: #ececec; font-family: "Inter", sans-serif; }
+.mono { font-family: "JetBrains Mono", monospace; }
+.casca button { background-image: none; background-color: transparent; border: none; box-shadow: none;
+                text-shadow: none; color: #8e8e8e; padding: 3px 8px; border-radius: 6px; min-height: 0; min-width: 0;
+                transition: background-color 100ms, color 100ms; }
+.casca button:backdrop { color: #8e8e8e; }
+.casca button:hover { color: #ffffff; background-color: #2a2a2a; }
+.casca entry { background-image: none; background-color: transparent; color: #ececec; border: none;
+               border-radius: 0; box-shadow: none; padding: 4px 2px; caret-color: #ffffff; }
+.casca scrollbar { background: transparent; border: none; }
+.casca scrollbar slider { min-width: 4px; min-height: 4px; border-radius: 4px; background-color: #333333; border: none; }
+.casca list, .casca list row { background: transparent; color: #ececec; }
+.dim { color: #7a7a7a; }
+.running { color: #3ecf8e; }
+.up { color: #3ecf8e; } .down { color: #4a4a4a; } .unknown { color: #7a7a7a; }
+.st-idle { color: #5a5a5a; } .st-working { color: #e5a50a; } .st-attn { color: #3ecf8e; }
+
+.casca headerbar, .casca headerbar:backdrop { background-image: none; background-color: #1c1c1c; border: none;
+                   border-bottom: 1px solid #2a2a2a; box-shadow: none; min-height: 36px; padding: 0 6px; border-radius: 0; }
+.casca button.brand { color: #ffffff; font-weight: 700; font-size: 1.05em; padding: 3px 10px; }
+.casca button.brand:hover { background-color: transparent; }
+.crumb { color: #8e8e8e; font-size: 0.92em; }
+.casca button.wm { padding: 2px 9px; color: #7a7a7a; font-size: 1.05em; }
+.casca button.wm.close:hover { background-color: #c0392b; color: #ffffff; }
+
+.sidebar { background: #1c1c1c; border-right: 1px solid #2a2a2a; }
+.sidehead { padding: 12px 8px 6px 14px; }
+.sidehead label { color: #8e8e8e; font-weight: 600; }
+.side row { padding: 0; border-radius: 0; margin: 0; outline: none; }
+.hostcard { background: #232323; border: 1px solid #303030; border-radius: 8px; padding: 6px 6px 6px 10px; margin: 5px 8px 2px 8px; }
+.side row:hover .hostcard { border-color: #454545; }
+.hostcard.off { background: transparent; border-color: transparent; opacity: 0.55; padding: 3px 6px 3px 10px; margin: 0 8px; }
+.hostname { font-weight: 600; }
+.badge { color: #8e8e8e; font-size: 0.78em; background: #2e2e2e; border-radius: 8px; padding: 0 6px; }
+.sessrow { padding: 5px 10px 5px 22px; margin: 0 8px; border-radius: 6px; }
+.side row:hover .sessrow { background: #262626; }
+.sessrow.current { background: #2c2c2c; }
+.sessrow .sname { color: #b4b4b4; }
+.sessrow.open .sname { color: #ececec; }
+.sessrow.attn .sname { color: #ffffff; font-weight: 700; }
+.meta { color: #6a6a6a; font-size: 0.8em; font-family: "JetBrains Mono", monospace; }
+.casca button.offline { color: #6a6a6a; font-size: 0.86em; padding: 8px 14px; }
+.sub { color: #7a7a7a; font-size: 0.86em; }
+
+.home { padding: 30px 40px 14px 40px; }
+.home-title { font-size: 1.45em; font-weight: 700; padding-bottom: 12px; }
+.searchbox { background: #1f1f1f; border: 1px solid #333333; border-radius: 10px; padding: 7px 12px; }
+.searchbox entry { font-size: 1.15em; }
+.prompt { color: #8e8e8e; font-size: 1.15em; }
+.summary { color: #7a7a7a; font-size: 0.86em; padding: 10px 4px 8px 4px; }
+.rows row { padding: 9px 12px; border-radius: 8px; margin: 1px 0; outline: none; border: 1px solid transparent; }
+.rows row:hover { background: #1b1b1b; }
+.rows row.sel { background: #202020; border-color: #303030; }
+.rows row.off { opacity: 0.5; }
+.hname { color: #ececec; font-weight: 600; font-size: 1.04em; }
+.casca button.agent { color: #a0a0a0; padding: 3px 9px; }
+.casca button.agent.on { color: #ececec; }
+.casca button.agent:hover { background-color: #2e2e2e; color: #ffffff; }
+.rows row.sel button.agent.pick { color: #141414; background-color: #ececec; font-weight: 600; }
+.kbd { font-family: "JetBrains Mono", monospace; font-size: 0.78em; color: #a0a0a0; background: #222222;
+       border: 1px solid #333333; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
+.keys { padding-top: 8px; border-top: 1px solid #262626; }
+
+popover { background-color: #1f1f1f; border: 1px solid #333333; border-radius: 10px; }
+.casca popover button { border: 1px solid #333333; padding: 4px 10px; color: #ececec; }
+.casca popover button:hover { border-color: #5a5a5a; }
+.casca popover entry { border-bottom: 1px solid #333333; }
+
+.casca notebook, .casca notebook stack { background: #141414; }
+.casca notebook header { background: #1c1c1c; border: none; border-bottom: 1px solid #2a2a2a; padding: 0; margin: 0; }
+.casca notebook header tabs { margin: 0; padding: 0; }
+.casca notebook header tab { padding: 7px 8px 7px 12px; margin: 0; border: none; border-right: 1px solid #2a2a2a;
+                             border-radius: 0; background: none; box-shadow: none; color: #8e8e8e; min-height: 0; }
+.casca notebook header tab:hover { background: #222222; }
+.casca notebook header tab:checked { background: #141414; color: #ececec; }
+.casca notebook header button { padding: 2px 6px; }
+.tablabel.attn { color: #ffffff; font-weight: 700; }
+.snips { border-top: 1px solid #262626; background: #1c1c1c; padding: 2px 6px; font-size: 0.88em; }
+"""
+
+AGENT_MARK = {"shell": ("❯", "#8e8e8e"), "claude": ("✻", "#d97757"), "codex": ("⬡", "#7cc4a4"),
+              "devin": ("◆", "#6ea8fe"), "jazz": ("♪", "#c792ea")}
+SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+
+
+def mark_of(name):
+    """Símbolo e cor de uma sessão pelo nome (c-claude, claude, devin-p0...)."""
+    n = name[2:] if name.startswith("c-") else name
+    for k, v in AGENT_MARK.items():
+        if n == k or n.startswith(k + "-"):
+            return v
+    return ("▪", "#7a7a7a")
+
+
+def age(ts):
+    d = max(0, int(time.time() - ts)) if ts else None
+    if d is None:
+        return ""
+    if d < 90:
+        return "agora"
+    if d < 3600:
+        return "%dm" % (d // 60)
+    if d < 86400:
+        return "%dh" % (d // 3600)
+    return "%dd" % (d // 86400)
+
+PALETTE = ["#141414", "#e5534b", "#86d96b", "#f0a045", "#6cb6ff", "#c792ea", "#5fd7c8", "#d6d3cd",
+           "#6e7681", "#ff7b72", "#56d364", "#e3b341", "#79c0ff", "#d2a8ff", "#56d4dd", "#f0f6fc"]
+
+NAME_W, TARGET_W = 20, 23
+STATE_TEXT = {"idle": "parado", "working": "trabalhando", "attn": "parou, olha lá"}
+TARGET_RE = re.compile(r"^[A-Za-z0-9._-]+@[A-Za-z0-9._:-]+$")
+
+
+def rgba(s):
+    c = Gdk.RGBA()
+    c.parse(s)
+    return c
+
+
+def esc(s):
+    return GLib.markup_escape_text(s or "")
+
+
+def cls(w, *names):
+    for n in names:
+        w.get_style_context().add_class(n)
+    return w
+
+
+def casca(*args, timeout=20):
+    """Roda um comando curto do casca e devolve o JSON (ou None)."""
+    try:
+        out = subprocess.run([CASCA, args[0], "-conf", CONF] + list(args[1:]),
+                             capture_output=True, timeout=timeout).stdout
+        return json.loads(out or b"null")
+    except Exception:
+        return None
+
+
+def in_thread(fn, done):
+    """Roda fn fora da thread da interface e entrega o resultado nela."""
+    def work():
+        res = fn()
+        GLib.idle_add(done, res)
+    threading.Thread(target=work, daemon=True).start()
+
+
+class App(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="casca")
+        self.cfg = {"hosts": [], "agents": []}
+        self.status = []
+        self.live = {}        # idx do host -> sessões tmux vivas lá
+        self.live_err = set()
+        self.live_at = 0
+        self.live_busy = False
+        self.font_size = 11
+        w, h = 1000, 640
+        try:
+            st = json.load(open(STATE))
+            self.font_size = int(st.get("font", 11))
+            w, h = int(st.get("w", w)), int(st.get("h", h))
+        except Exception:
+            pass
+        self.set_default_size(w, h)
+        self.set_icon_name("utilities-terminal")
+
+        prov = Gtk.CssProvider()
+        prov.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), prov,
+                                                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", True)
+
+        cls(self, "casca")
+        self.sel_agent = 0
+        self.sel_idx = None
+        self.show_off = False
+        self.spin = 0
+
+        # barra de título própria, no lugar da do gerenciador de janelas
+        hb = Gtk.HeaderBar()
+        hb.set_show_close_button(False)
+        brand = cls(Gtk.Button(label="casca"), "brand")
+        brand.set_tooltip_text("todos os hosts (Ctrl+Shift+H)")
+        brand.set_can_focus(False)
+        brand.connect("clicked", lambda *_: self.show_home())
+        hb.pack_start(brand)
+        self.crumb = cls(Gtk.Label(), "crumb")
+        self.crumb.set_ellipsize(Pango.EllipsizeMode.END)
+        hb.set_custom_title(self.crumb)
+        for glyph, klass, tip, fn in (("×", "close", "fechar", lambda *_: self.close()),
+                                      ("□", "max", "maximizar", lambda *_: self.toggle_max()),
+                                      ("–", "min", "minimizar", lambda *_: self.iconify())):
+            b = cls(Gtk.Button(label=glyph), "wm", klass)
+            b.set_tooltip_text(tip)
+            b.set_can_focus(False)
+            b.connect("clicked", fn)
+            hb.pack_end(b)
+        self.set_titlebar(hb)
+
+        paned = Gtk.Box()
+        self.add(paned)
+
+        # ---- lateral: hosts e, embaixo de cada um, as sessões vivas lá ----
+        self.side = cls(Gtk.Box(orientation=Gtk.Orientation.VERTICAL), "sidebar")
+        self.side.set_size_request(250, -1)
+        head = cls(Gtk.Box(spacing=2), "sidehead")
+        head.pack_start(Gtk.Label(label="Hosts", xalign=0), True, True, 0)
+        for text, tip, fn in (("+", "cadastrar um host", lambda *_: self.host_dialog(-1)),
+                              ("↻", "consultar os hosts de novo", lambda *_: (self.poll_status(), self.refresh_live(True)))):
+            b = Gtk.Button(label=text)
+            b.set_tooltip_text(tip)
+            b.set_can_focus(False)
+            b.connect("clicked", fn)
+            head.pack_end(b, False, False, 0)
+        self.side.pack_start(head, False, False, 0)
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.sess = cls(Gtk.ListBox(), "side")
+        self.sess.set_activate_on_single_click(True)
+        self.sess.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.sess.connect("row-activated", self.on_sess_row)
+        sw.add(self.sess)
+        self.side.pack_start(sw, True, True, 0)
+        self.side_off = cls(Gtk.Button(), "offline")
+        self.side_off_lab = Gtk.Label(xalign=0)
+        self.side_off_lab.set_ellipsize(Pango.EllipsizeMode.END)
+        self.side_off.add(self.side_off_lab)
+        self.side_off.set_can_focus(False)
+        self.side_off.connect("clicked", self.toggle_off)
+        self.side.pack_start(self.side_off, False, False, 0)
+        paned.pack_start(self.side, False, False, 0)
+
+        # ---- área principal: início (lista de hosts) ou o terminal ----
+        self.stack = Gtk.Stack()
+        self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.stack.set_transition_duration(110)
+        self.stack.add_named(self.build_home(), "home")
+        tabs = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.nb = Gtk.Notebook()
+        self.nb.set_scrollable(True)
+        self.nb.set_show_border(False)
+        plus = Gtk.Button(label="+")
+        plus.set_tooltip_text("nova sessão (Ctrl+Shift+K)")
+        plus.set_can_focus(False)
+        plus.connect("clicked", lambda *_: self.show_home())
+        plus.show()
+        self.nb.set_action_widget(plus, Gtk.PackType.END)
+        self.nb.connect("switch-page", self.on_switch)
+        self.nb.connect("page-removed", lambda *_: self.sync_empty())
+        tabs.pack_start(self.nb, True, True, 0)
+        self.snips = cls(Gtk.Box(spacing=2), "snips")
+        tabs.pack_start(self.snips, False, False, 0)
+        self.stack.add_named(tabs, "tabs")
+        paned.pack_start(self.stack, True, True, 0)
+
+        self.connect("key-press-event", self.on_key)
+        self.connect("delete-event", self.on_quit)
+        self.connect("notify::is-active", lambda *_: self.seen_current())
+        self.load_config()
+        self.poll_status()
+        GLib.timeout_add_seconds(30, self.poll_status)
+        GLib.timeout_add_seconds(3, self.watch_config)
+        GLib.timeout_add_seconds(1, self.tick)
+        GLib.timeout_add(130, self.spin_tick)
+        GLib.timeout_add_seconds(60, lambda: (self.refresh_live(True), True)[1])
+        self.show_all()
+        self.show_home()
+
+    # ---------- início ----------
+    def retitle(self, text):
+        self.set_title(text + " — casca" if text else "casca")
+        self.crumb.set_text(text or "hosts")
+
+    def toggle_max(self):
+        (self.unmaximize if self.is_maximized() else self.maximize)()
+
+    def build_home(self):
+        box = cls(Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0), "home")
+        box.pack_start(cls(Gtk.Label(label="Nova sessão", xalign=0), "home-title"), False, False, 0)
+        sb = cls(Gtk.Box(spacing=10), "searchbox")
+        sb.pack_start(cls(Gtk.Label(label="›"), "prompt"), False, False, 0)
+        self.search = Gtk.Entry(placeholder_text="Abrir…  host [agente]  ou  user@host")
+        self.search.set_has_frame(False)
+        self.search.connect("changed", self.on_search_changed)
+        self.search.connect("activate", self.on_search_enter)
+        self.search.connect("key-press-event", self.on_search_key)
+        sb.pack_start(self.search, True, True, 0)
+        box.pack_start(sb, False, False, 0)
+        self.home_sub = cls(Gtk.Label(xalign=0), "summary")
+        self.home_sub.set_ellipsize(Pango.EllipsizeMode.END)
+        box.pack_start(self.home_sub, False, False, 0)
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        self.rows = cls(Gtk.ListBox(), "rows")
+        self.rows.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.rows.set_activate_on_single_click(True)
+        self.rows.connect("row-activated", lambda _l, row: (self.select(row), self.search.grab_focus_without_selecting()))
+        sw.add(self.rows)
+        box.pack_start(sw, True, True, 0)
+        keys = cls(Gtk.Box(spacing=6), "keys")
+        for k, what in (("↑↓", "host"), ("←→", "agente"), ("⏎", "abrir"), ("Alt 1…9", "aba")):
+            keys.pack_start(cls(Gtk.Label(label=k), "kbd"), False, False, 0)
+            l = cls(Gtk.Label(label=what), "sub")
+            l.set_margin_end(10)
+            keys.pack_start(l, False, False, 0)
+        tip = cls(Gtk.Label(label="tudo roda em tmux no host: fechar ou cair a rede não mata nada", xalign=1), "sub")
+        tip.set_ellipsize(Pango.EllipsizeMode.END)
+        keys.pack_end(tip, True, True, 0)
+        box.pack_start(keys, False, False, 0)
+        return box
+
+    def toggle_off(self, *_):
+        self.show_off = not self.show_off
+        self.rebuild_side()
+        self.render_home()
+
+    def st_of(self, idx):
+        return (self.status[idx] if idx < len(self.status) else None) or "unknown"
+
+    def render_home(self):
+        keep = self.sel_idx
+        for c in self.rows.get_children():
+            self.rows.remove(c)
+        hosts = self.cfg["hosts"]
+        searching = bool(self.search.get_text().strip())
+        order = sorted(range(len(hosts)), key=lambda i: (self.st_of(i) == "down", i))
+        first, kept, off = None, None, []
+        for i in order:
+            if not self.match_host(hosts[i]):
+                continue
+            if self.st_of(i) == "down":
+                off.append(hosts[i].get("name", "?"))
+                if not (self.show_off or searching):
+                    continue
+            row = self.make_row(i, hosts[i])
+            self.rows.add(row)
+            first = first or row
+            if i == keep:
+                kept = row
+        up = sum(1 for i in range(len(hosts)) if self.st_of(i) == "up")
+        n = len(self.terms())
+        txt = "%d online  ·  %d fora" % (up, len(hosts) - up)
+        if n:
+            txt += "  ·  %d %s" % (n, "sessão aberta" if n == 1 else "sessões abertas")
+        if self.live_busy:
+            txt += "  ·  procurando sessões vivas…"
+        self.home_sub.set_text(txt)
+        self.rows.show_all()
+        self.select(kept or first)
+
+    def make_row(self, idx, h):
+        st = self.st_of(idx)
+        row = Gtk.ListBoxRow()
+        row.idx, row.host, row.btns = idx, h, []
+        if st == "down":
+            cls(row, "off")
+        box = Gtk.Box(spacing=0)
+        dot = cls(Gtk.Label(label={"up": "●", "down": "○"}.get(st, "◌"), xalign=0), st)
+        dot.set_width_chars(3)
+        dot.set_tooltip_text({"up": "respondendo", "down": "sem resposta"}.get(st, "não sei ainda"))
+        box.pack_start(dot, False, False, 0)
+        nm = cls(Gtk.Label(label=h.get("name", "?"), xalign=0), "hname")
+        nm.set_width_chars(NAME_W)
+        nm.set_max_width_chars(NAME_W)
+        nm.set_ellipsize(Pango.EllipsizeMode.END)
+        box.pack_start(nm, False, False, 0)
+        tg = cls(Gtk.Label(label=h.get("target", ""), xalign=0), "dim", "mono")
+        tg.set_width_chars(TARGET_W)
+        tg.set_max_width_chars(TARGET_W)
+        tg.set_ellipsize(Pango.EllipsizeMode.END)
+        # com a lateral aberta numa tela de 1024 não cabe tudo: o endereço vira dica
+        narrow = self.get_size()[0] < 1180
+        if narrow:
+            nm.set_tooltip_text(h.get("target", ""))
+        else:
+            box.pack_start(tg, False, False, 0)
+
+        def agent_btn(name, on, tip, fn, glyph=None):
+            mark, color = glyph or AGENT_MARK.get(name, ("•", "#8b8b93"))
+            live = "<span foreground='#86d96b' size='small'>  ●</span>" if on else ""
+            b = cls(Gtk.Button(), "agent")
+            if on:
+                cls(b, "on")
+            b.lab = Gtk.Label()
+            b.normal = "<span foreground='%s'>%s</span>  %s%s" % (color, mark, esc(name), live)
+            b.plain = "%s  %s%s" % (mark, esc(name), "  ●" if on else "")
+            b.lab.set_markup(b.normal)
+            b.add(b.lab)
+            b.set_can_focus(False)
+            b.set_tooltip_text(tip)
+            b.connect("clicked", fn)
+            box.pack_start(b, False, False, 0)
+            return b
+
+        sessions = self.live.get(idx) or []
+        alive = {s["name"] for s in sessions}
+        names = set()
+        for a in self.cfg["agents"]:
+            names.add("c-" + a["name"])
+            on = "c-" + a["name"] in alive
+            b = agent_btn(a["name"], on,
+                          "%s já está rodando lá: reabrir" % a["name"] if on else "abrir %s em %s" % (a["name"], h.get("name")),
+                          lambda _b, a=a: self.open_agent(idx, a["name"]))
+            row.btns.append((b, a["name"]))
+        for s in [s for s in sessions if s["name"] not in names][:0 if narrow else 3]:
+            agent_btn(s["name"], True, "sessão tmux viva no host (%s): abrir" % s["command"],
+                      lambda _b, s=s: self.open_session(idx, s["name"]), glyph=("▪", "#6f6f78"))
+        if idx in self.live_err and st == "up" and not sessions:
+            l = cls(Gtk.Label(label="   ?"), "dim")
+            l.set_tooltip_text("não deu pra listar as sessões desse host (talvez peça aprovação)")
+            box.pack_start(l, False, False, 0)
+        more = Gtk.Button(label="⋯")
+        more.set_can_focus(False)
+        more.set_tooltip_text("pasta, nome ou comando próprio; encerrar sessões; editar host")
+        more.connect("clicked", lambda b: self.open_host_menu(b, idx, h))
+        box.pack_end(more, False, False, 0)
+        row.add(box)
+        return row
+
+    def selected(self):
+        for row in self.rows.get_children():
+            if row.idx == self.sel_idx:
+                return row
+        return None
+
+    def select(self, row):
+        self.sel_idx = row.idx if row is not None else None
+        self.paint_pick()
+
+    def paint_pick(self):
+        sel = self.selected()
+        for row in self.rows.get_children():
+            ctx = row.get_style_context()
+            (ctx.add_class if row is sel else ctx.remove_class)("sel")
+            for n, (b, _name) in enumerate(row.btns):
+                pick = row is sel and n == self.sel_agent
+                ctx = b.get_style_context()
+                (ctx.add_class if pick else ctx.remove_class)("pick")
+                b.lab.set_markup(b.plain if pick else b.normal)
+
+    def open_picked(self, row=None):
+        row = row or self.selected()
+        if row and row.btns:
+            self.open_agent(row.idx, row.btns[min(self.sel_agent, len(row.btns) - 1)][1])
+
+    def on_search_key(self, _w, ev):
+        k = Gdk.keyval_name(ev.keyval) or ""
+        rows = self.rows.get_children()
+        if k in ("Down", "Up") and rows:
+            sel = self.selected()
+            n = rows.index(sel) if sel in rows else -1
+            self.select(rows[(n + (1 if k == "Down" else -1)) % len(rows)])
+            return True
+        if k in ("Left", "Right") and not self.search.get_text():
+            self.sel_agent = (self.sel_agent + (1 if k == "Right" else -1)) % max(1, len(self.cfg["agents"]))
+            self.paint_pick()
+            return True
+        return False
+
+    def refresh_live(self, force=False):
+        if self.live_busy or (not force and time.time() - self.live_at < 60):
+            return
+        idxs = [i for i in range(len(self.cfg["hosts"])) if self.st_of(i) == "up"]
+        if not idxs:
+            return
+        self.live_busy = True
+        self.render_home()
+
+        def work():
+            with ThreadPoolExecutor(3) as ex:
+                return dict(zip(idxs, ex.map(lambda i: casca("ls", str(i), timeout=15), idxs)))
+
+        def done(res):
+            self.live_busy = False
+            self.live_at = time.time()
+            for i, r in res.items():
+                ss = (r or {}).get("sessions") or []
+                if r is None or (r.get("error") and not ss):
+                    self.live_err.add(i)
+                else:
+                    self.live_err.discard(i)
+                    self.live[i] = ss
+            self.rebuild_side()
+            self.render_home()
+        in_thread(work, done)
+
+    def show_home(self):
+        self.stack.set_visible_child_name("home")
+        self.retitle("")
+        self.mark_current()
+        self.render_home()
+        self.refresh_live()
+        self.search.grab_focus()
+
+    def show_tabs(self):
+        if self.nb.get_n_pages():
+            self.stack.set_visible_child_name("tabs")
+            t = self.current()
+            if t:
+                self.retitle(t.title)
+                self.seen_current()
+                t.grab_focus()
+            self.mark_current()
+
+    def on_tabs(self):
+        return self.stack.get_visible_child_name() == "tabs"
+
+    # ---------- config / barra lateral ----------
+    def load_config(self):
+        try:
+            self.cfg = json.load(open(CONF))
+            self.cfg_mtime = os.stat(CONF).st_mtime
+        except Exception as e:
+            self.cfg_mtime = 0
+            print("config:", e, file=sys.stderr)
+        self.cfg.setdefault("hosts", [])
+        self.cfg.setdefault("agents", [])
+        self.rebuild_side()
+        self.render_home()
+        for c in self.snips.get_children():
+            self.snips.remove(c)
+        for s in self.cfg.get("snippets") or []:
+            b = Gtk.Button(label=s.get("label", "?"))
+            b.set_can_focus(False)
+            b.set_tooltip_text("digita na aba: " + s.get("cmd", "").strip())
+            b.connect("clicked", lambda _b, s=s: self.feed(s.get("cmd", "")))
+            self.snips.pack_start(b, False, False, 0)
+        self.snip_state = cls(Gtk.Label(xalign=1), "sub")
+        self.snip_state.set_ellipsize(Pango.EllipsizeMode.START)
+        self.snips.pack_end(self.snip_state, True, True, 4)
+        self.snips.show_all()
+
+    def terms(self):
+        return [self.nb.get_nth_page(i) for i in range(self.nb.get_n_pages())]
+
+    def rebuild_side(self):
+        for r in self.sess.get_children():
+            self.sess.remove(r)
+        hosts = self.cfg["hosts"]
+        terms = self.terms()
+        for t in terms:
+            t.row = t.row_dot = t.row_name = t.row_meta = None
+        off = [i for i in range(len(hosts)) if self.st_of(i) == "down"]
+        order = [i for i in range(len(hosts)) if i not in off] + (off if self.show_off else [])
+        for i in order:
+            h = hosts[i]
+            st = self.st_of(i)
+            mine = [t for t in terms if t.idx == i]
+            live = {x["name"]: x for x in (self.live.get(i) or [])}
+            names = [t.tmux for t in mine] + [n for n in live if n not in {t.tmux for t in mine}]
+
+            row = Gtk.ListBoxRow()
+            row.kind, row.idx, row.host = "host", i, h
+            card = cls(Gtk.Box(spacing=7), "hostcard")
+            if st == "down":
+                cls(card, "off")
+            card.pack_start(cls(Gtk.Label(label="●" if st != "down" else "○"), st), False, False, 0)
+            nm = cls(Gtk.Label(label=h.get("name", "?"), xalign=0), "hostname")
+            nm.set_ellipsize(Pango.EllipsizeMode.END)
+            nm.set_tooltip_text(h.get("target", ""))
+            card.pack_start(nm, True, True, 0)
+            if names:
+                card.pack_start(cls(Gtk.Label(label=str(len(names))), "badge"), False, False, 0)
+            plus = Gtk.Button(label="+")
+            plus.set_tooltip_text("nova sessão em " + h.get("name", ""))
+            plus.set_can_focus(False)
+            plus.connect("clicked", lambda b, i=i, h=h: self.open_host_menu(b, i, h))
+            card.pack_end(plus, False, False, 0)
+            row.add(card)
+            self.sess.add(row)
+
+            for name in names:
+                t = next((t for t in mine if t.tmux == name), None)
+                info = live.get(name) or {}
+                r = Gtk.ListBoxRow()
+                r.kind, r.idx, r.host, r.name, r.term = "sess", i, h, name, t
+                box = cls(Gtk.Box(spacing=7), "sessrow")
+                dot = cls(Gtk.Label(label="●" if t else "○"), "mono", "st-idle")
+                dot.set_width_chars(2)
+                box.pack_start(dot, False, False, 0)
+                mark, color = mark_of(name)
+                ml = Gtk.Label()
+                ml.set_markup("<span foreground='%s'>%s</span>" % (color, mark))
+                box.pack_start(ml, False, False, 0)
+                lab = cls(Gtk.Label(label=name[2:] if name.startswith("c-") else name, xalign=0), "sname")
+                lab.set_ellipsize(Pango.EllipsizeMode.END)
+                box.pack_start(lab, True, True, 0)
+                meta = cls(Gtk.Label(label=" ".join(x for x in (info.get("command", ""), age(info.get("activity"))) if x)), "meta")
+                box.pack_end(meta, False, False, 0)
+                r.box = box
+                r.add(box)
+                r.set_tooltip_text("aberta nesta janela" if t else "viva no host: clique pra abrir aqui")
+                self.sess.add(r)
+                if t:
+                    cls(box, "open")
+                    t.row, t.row_dot, t.row_name, t.row_meta = r, dot, lab, meta
+                    self.paint_term(t)
+        self.sess.show_all()
+        self.side_off.set_visible(bool(off))
+        self.side_off_lab.set_text("▾  esconder os sem resposta" if self.show_off else "▸  %d sem resposta" % len(off))
+        self.mark_current()
+
+    def mark_current(self):
+        cur = self.current() if self.on_tabs() else None
+        for t in self.terms():
+            if getattr(t, "row", None) is None:
+                continue
+            ctx = t.row.box.get_style_context()
+            (ctx.add_class if t is cur else ctx.remove_class)("current")
+
+    def watch_config(self):
+        try:
+            if os.stat(CONF).st_mtime != self.cfg_mtime:
+                self.load_config()
+                self.poll_status()
+        except OSError:
+            pass
+        return True
+
+    def query(self):
+        """Texto da busca separado em (filtro de host, agente)."""
+        words = self.search.get_text().strip().lower().split()
+        agent = ""
+        if len(words) > 1 and words[-1] in [a["name"].lower() for a in self.cfg["agents"]]:
+            agent = words.pop()
+        return " ".join(words), agent
+
+    def match_host(self, h):
+        q, _ = self.query()
+        return not q or q in (h.get("name", "") + " " + h.get("target", "")).lower()
+
+    def on_sess_row(self, _l, row):
+        if row.kind == "host":
+            self.open_host_menu(row.get_child(), row.idx, row.host)
+        elif row.term is not None:
+            self.nb.set_current_page(self.nb.page_num(row.term))
+            self.show_tabs()
+        else:
+            self.open_session(row.idx, row.name)
+
+    def on_search_changed(self, *_):
+        self.render_home()
+
+    def on_search_enter(self, *_):
+        text = self.search.get_text().strip()
+        _q, agent = self.query()
+        row = self.selected()
+        if row:
+            self.search.set_text("")
+            if agent:
+                self.open_agent(row.idx, agent)
+            else:
+                self.open_picked(row)
+        elif TARGET_RE.match(text):   # conexão rápida: cadastra e abre
+            self.cfg["hosts"].append({"name": text, "target": text, "group": "rápido"})
+            self.save_config()
+            self.search.set_text("")
+            self.open_agent(len(self.cfg["hosts"]) - 1, self.cfg["agents"][0]["name"])
+        elif text:
+            self.toast("nenhum host com esse nome. Pra conectar direto, digite user@host.")
+
+    def poll_status(self):
+        in_thread(lambda: casca("status", timeout=15), self.got_status)
+        return True
+
+    def got_status(self, res):
+        if isinstance(res, list) and res != self.status:
+            first = not self.status
+            self.status = res
+            self.rebuild_side()
+            self.render_home()
+            if first:
+                self.refresh_live(True)
+
+    def paint_status(self):
+        pass
+
+    def save_config(self):
+        tmp = CONF + ".tmp"
+        with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+            json.dump(self.cfg, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        os.replace(tmp, CONF)
+        self.load_config()
+        self.poll_status()
+
+    def host_dialog(self, idx):
+        h = dict(self.cfg["hosts"][idx]) if idx >= 0 else {}
+        d = Gtk.Dialog(title="editar host" if idx >= 0 else "novo host", transient_for=self, modal=True)
+        d.add_button("cancelar", Gtk.ResponseType.CANCEL)
+        if idx >= 0:
+            d.add_button("remover", Gtk.ResponseType.REJECT)
+        d.add_button("salvar", Gtk.ResponseType.OK)
+        d.set_default_response(Gtk.ResponseType.OK)
+        grid = Gtk.Grid(row_spacing=6, column_spacing=8, margin=12)
+        fields = {}
+        for r, (key, label, ph) in enumerate([("target", "destino", "user@host (ou local)"), ("name", "nome", ""),
+                                              ("group", "grupo", "tailnet"), ("dir", "pasta padrão", "~/projeto"),
+                                              ("args", "ssh extra", "-p 2222")]):
+            grid.attach(Gtk.Label(label=label, xalign=1), 0, r, 1, 1)
+            e = Gtk.Entry(text=h.get(key, ""), placeholder_text=ph, activates_default=True, width_chars=32)
+            grid.attach(e, 1, r, 1, 1)
+            fields[key] = e
+        d.get_content_area().add(grid)
+        d.show_all()
+        resp = d.run()
+        vals = {k: e.get_text().strip() for k, e in fields.items()}
+        d.destroy()
+        if resp == Gtk.ResponseType.REJECT:
+            if any(t.idx >= idx for t in self.terms()):
+                self.toast("feche as abas abertas antes de remover um host")
+                return
+            del self.cfg["hosts"][idx]
+            self.live, self.status = {}, []
+            self.save_config()
+        elif resp == Gtk.ResponseType.OK:
+            t = vals["target"]
+            if not t or t.startswith("-") or " " in t:
+                self.toast("destino deve ser user@host")
+                return
+            new = {k: v for k, v in vals.items() if v}
+            new.setdefault("name", t)
+            if idx >= 0:
+                self.cfg["hosts"][idx] = new
+            else:
+                self.cfg["hosts"].append(new)
+            self.save_config()
+
+    def toast(self, msg):
+        d = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.INFO,
+                              buttons=Gtk.ButtonsType.OK, text=msg)
+        d.run()
+        d.destroy()
+
+    # ---------- menu do host (o que abrir) ----------
+    def open_host_menu(self, anchor, idx, h):
+        pop = Gtk.Popover(relative_to=anchor)
+        pop.set_position(Gtk.PositionType.BOTTOM)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=10)
+        head = Gtk.Box(spacing=8)
+        t = Gtk.Label(xalign=0)
+        t.set_markup("<b>%s</b>" % esc(h.get("name", "")))
+        head.pack_start(t, True, True, 0)
+        ed = Gtk.Button(label="editar")
+        ed.set_relief(Gtk.ReliefStyle.NONE)
+        ed.connect("clicked", lambda *_: (pop.popdown(), self.host_dialog(idx)))
+        head.pack_end(ed, False, False, 0)
+        box.pack_start(head, False, False, 0)
+
+        flow = Gtk.FlowBox(max_children_per_line=3, min_children_per_line=3, selection_mode=Gtk.SelectionMode.NONE)
+        flow.set_column_spacing(6)
+        flow.set_row_spacing(6)
+        btns = {}
+        first = None
+        for a in self.cfg["agents"]:
+            b = Gtk.Button()
+            v = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            nm = Gtk.Label(xalign=0)
+            nm.set_markup("<b>%s</b>" % esc(a["name"]))
+            sub = cls(Gtk.Label(label="novo", xalign=0), "sub")
+            v.pack_start(nm, False, False, 0)
+            v.pack_start(sub, False, False, 0)
+            b.add(v)
+            b.connect("clicked", lambda _b, a=a: (pop.popdown(), self.open_agent(idx, a["name"])))
+            flow.add(b)
+            btns["c-" + a["name"]] = sub
+            first = first or b
+        box.pack_start(flow, False, False, 0)
+
+        box.pack_start(cls(Gtk.Label(label="rodando no host", xalign=0), "sub"), False, False, 0)
+        live = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        live.pack_start(cls(Gtk.Label(label="consultando…", xalign=0), "sub"), False, False, 0)
+        box.pack_start(live, False, False, 0)
+
+        adv = Gtk.Expander(label="sessão com nome, pasta ou comando próprio")
+        g = Gtk.Grid(row_spacing=4, column_spacing=6, margin_top=6)
+        e_cmd = Gtk.Entry(placeholder_text="comando (vazio = shell)", width_chars=30)
+        e_name = Gtk.Entry(placeholder_text="nome da sessão")
+        e_dir = Gtk.Entry(placeholder_text="pasta no host", text=h.get("dir", ""))
+        go = Gtk.Button(label="abrir")
+
+        def launch(*_):
+            cmd, name, d = e_cmd.get_text().strip(), e_name.get_text().strip(), e_dir.get_text().strip()
+            args = ["-cmd", cmd] if cmd else []
+            name = name or (cmd.split()[0] if cmd else "")
+            if name:
+                args += ["-name", name]
+            if d:
+                args += ["-dir", d]
+            pop.popdown()
+            self.open_tab(idx, args, h["name"] + " · " + (name or "shell"))
+        for e in (e_cmd, e_name, e_dir):
+            e.connect("activate", launch)
+        go.connect("clicked", launch)
+        for r, wdg in enumerate((e_cmd, e_name, e_dir, go)):
+            g.attach(wdg, 0, r, 1, 1)
+        adv.add(g)
+        box.pack_start(adv, False, False, 0)
+        pop.add(box)
+        pop.show_all()
+        if first:
+            first.grab_focus()
+
+        def got(res):
+            if not pop.get_visible():
+                return
+            for c in live.get_children():
+                live.remove(c)
+            sessions = (res or {}).get("sessions") or []
+            if res is None or (res.get("error") and not sessions):
+                msg = "não consegui consultar o host"
+            elif not sessions:
+                msg = "nenhuma sessão tmux viva"
+            else:
+                msg = None
+            if msg:
+                live.pack_start(cls(Gtk.Label(label=msg, xalign=0), "sub"), False, False, 0)
+            for s in sessions:
+                if s["name"] in btns:
+                    btns[s["name"]].set_text("● rodando · " + s["command"])
+                    cls(btns[s["name"]], "running")
+                r = Gtk.Box(spacing=6)
+                l = Gtk.Label(xalign=0)
+                l.set_markup("<span foreground='#86d96b'>●</span> <b>%s</b>  <small>%s</small>" % (
+                    esc(s["name"]), esc(s["command"])))
+                r.pack_start(l, True, True, 0)
+                ob = Gtk.Button(label="abrir")
+                ob.connect("clicked", lambda _b, s=s: (pop.popdown(), self.open_session(idx, s["name"])))
+                kb = Gtk.Button(label="encerrar")
+                kb.connect("clicked", lambda _b, s=s, r=r: self.kill_remote(idx, h, s["name"], r))
+                r.pack_end(kb, False, False, 0)
+                r.pack_end(ob, False, False, 0)
+                live.pack_start(r, False, False, 0)
+            live.show_all()
+        in_thread(lambda: casca("ls", str(idx), timeout=15), got)
+
+    def kill_remote(self, idx, h, name, rowbox):
+        d = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.WARNING,
+                              buttons=Gtk.ButtonsType.OK_CANCEL,
+                              text='Encerrar a sessão "%s" em %s?' % (name, h.get("name")))
+        d.format_secondary_text("O que estiver rodando nela morre.")
+        ok = d.run() == Gtk.ResponseType.OK
+        d.destroy()
+        if ok:
+            def done(rc):
+                if rc == 0:
+                    rowbox.destroy()
+                    self.live[idx] = [s for s in self.live.get(idx, []) if s["name"] != name]
+                    self.render_home()
+                else:
+                    self.toast("não consegui encerrar")
+            in_thread(lambda: subprocess.run([CASCA, "kill", "-conf", CONF, str(idx), name],
+                                             capture_output=True, timeout=20).returncode, done)
+
+    # ---------- abas ----------
+    def open_agent(self, idx, agent):
+        h = self.cfg["hosts"][idx]
+        self.open_tab(idx, ["-agent", agent], h["name"] + " · " + agent)
+
+    def open_session(self, idx, name):
+        """Sessão viva pelo nome; as dos agentes (c-NOME) caem na mesma aba do agente."""
+        for a in self.cfg["agents"]:
+            if name == "c-" + a["name"]:
+                return self.open_agent(idx, a["name"])
+        self.open_tab(idx, ["-attach", name], self.cfg["hosts"][idx]["name"] + " · " + name)
+
+    def open_tab(self, idx, args, label):
+        # Uma aba por sessão: se já está aberta, só mostra.
+        for i, p in enumerate(self.terms()):
+            if p.key == (idx, tuple(args)):
+                self.nb.set_current_page(i)
+                self.show_tabs()
+                return
+        term = Vte.Terminal()
+        term.key = (idx, tuple(args))
+        term.idx = idx
+        term.title = label
+        term.short = label.split(" · ", 1)[-1]
+        a = list(args)
+        term.tmux = ("c-" + a[a.index("-agent") + 1] if "-agent" in a else
+                     a[a.index("-attach") + 1] if "-attach" in a else
+                     a[a.index("-name") + 1] if "-name" in a else term.short)
+        term.row = term.row_dot = term.row_name = term.row_meta = None
+        term.topic = ""
+        term.state = "idle"
+        term.ev = []
+        term.last_key = 0.0
+        term.work_since = 0.0
+        term.set_scrollback_lines(2000)
+        term.set_scroll_on_keystroke(True)
+        term.set_mouse_autohide(True)
+        term.set_audible_bell(False)
+        term.set_colors(rgba("#e6e6e6"), rgba("#141414"), [rgba(c) for c in PALETTE])
+        term.set_color_cursor(rgba("#ececec"))
+        self.apply_font(term)
+        term.set_margin_start(8)
+        term.set_margin_end(4)
+        term.set_margin_top(4)
+
+        tab = Gtk.Box(spacing=6)
+        term.dot = cls(Gtk.Label(label="●"), "mono", "st-idle")
+        mark, color = mark_of(term.tmux)
+        ml = Gtk.Label()
+        ml.set_markup("<span foreground='%s'>%s</span>" % (color, mark))
+        term.lab = cls(Gtk.Label(label=label), "tablabel")
+        close = Gtk.Button(label="×")
+        close.set_can_focus(False)
+        close.set_tooltip_text("fechar aba (o tmux continua no host)")
+        close.connect("clicked", lambda *_: self.close_tab(term))
+        for w in (term.dot, ml, term.lab):
+            tab.pack_start(w, False, False, 0)
+        tab.pack_end(close, False, False, 0)
+        tab.show_all()
+        n = self.nb.append_page(term, tab)
+        self.nb.set_tab_reorderable(term, True)
+        term.connect("child-exited", lambda t, _st: self.close_tab(t))
+        term.connect("bell", self.on_bell)
+        term.connect("contents-changed", self.on_activity)
+        term.connect("window-title-changed", self.on_title)
+        term.connect("key-press-event", self.on_term_key)
+        term.connect("button-press-event", self.on_term_button)
+        term.show()
+        self.rebuild_side()
+        self.nb.set_current_page(n)
+        self.show_tabs()
+        argv = [CASCA, "connect", "-conf", CONF] + list(args) + [str(idx)]
+        term.spawn_async(Vte.PtyFlags.DEFAULT, os.path.expanduser("~"), argv, None,
+                         GLib.SpawnFlags.DEFAULT, None, None, -1, None, None)
+
+    def close_tab(self, term):
+        n = self.nb.page_num(term)
+        if n >= 0:
+            self.nb.remove_page(n)   # fecha o pty: o ssh local morre, o tmux remoto fica
+        self.rebuild_side()
+        self.sync_empty()
+        self.live_at = 0
+
+    def sync_empty(self):
+        if self.nb.get_n_pages() == 0:
+            self.show_home()
+
+    def current(self):
+        n = self.nb.get_current_page()
+        return self.nb.get_nth_page(n) if n >= 0 else None
+
+    def on_switch(self, _nb, page, _n):
+        if self.on_tabs():
+            self.retitle(page.title)
+        GLib.idle_add(self.after_switch)
+
+    def after_switch(self):
+        self.seen_current()
+        self.mark_current()
+        t = self.current()
+        if t and self.on_tabs():
+            t.grab_focus()
+        return False
+
+    # ---------- estado de cada sessão ----------
+    def looking_at(self, term):
+        return term is self.current() and self.on_tabs() and self.is_active()
+
+    def seen_current(self):
+        t = self.current()
+        if t and t.state == "attn" and self.looking_at(t):
+            self.set_state(t, "idle")
+        if not any(x.state == "attn" for x in self.terms()):
+            self.set_urgency_hint(False)
+
+    def set_state(self, term, state):
+        if term.state == state:
+            return
+        term.state = state
+        self.paint_term(term)
+        if state == "attn":
+            self.set_urgency_hint(True)
+
+    def paint_term(self, term):
+        text = STATE_TEXT[term.state] + (" · " + term.topic if term.topic else "")
+        # título de shell é só o nome da máquina; o de agente diz o que ele está fazendo
+        topic = term.topic if (" " in term.topic or not term.topic[:1].isalnum()) else ""
+        topic = topic.lstrip("✳✻* ").strip()
+        for dot in (getattr(term, "dot", None), term.row_dot):
+            if dot is None:
+                continue
+            ctx = dot.get_style_context()
+            for c in ("st-idle", "st-working", "st-attn"):
+                ctx.remove_class(c)
+            ctx.add_class("st-" + term.state)
+        if getattr(term, "lab", None) is not None:
+            ctx = term.lab.get_style_context()
+            (ctx.add_class if term.state == "attn" else ctx.remove_class)("attn")
+            full = topic or term.title
+            term.lab.set_text(full if len(full) <= 30 else full[:29] + "…")
+            term.lab.get_parent().set_tooltip_text(term.title + "\n" + text)
+        if term.row is not None:
+            ctx = term.row.box.get_style_context()
+            (ctx.add_class if term.state == "attn" else ctx.remove_class)("attn")
+            term.row_name.set_text(topic or term.short)
+            term.row.set_tooltip_text(term.title + "\n" + text)
+        if term is self.current() and hasattr(self, "snip_state"):
+            self.snip_state.set_text(term.title + "   " + text)
+
+    def on_activity(self, term):
+        now = time.monotonic()
+        if now - term.last_key > 1.0:    # eco do que você digita não é o agente trabalhando
+            term.ev.append(now)
+
+    def tick(self):
+        now = time.monotonic()
+        for t in self.terms():
+            t.ev = [x for x in t.ev if now - x < 3]
+            if len(t.ev) >= 3:
+                if t.state != "working":
+                    t.work_since = now
+                    self.set_state(t, "working")
+            elif t.state == "working" and (not t.ev or now - t.ev[-1] > 2.5):
+                # trabalhou um tempo e parou sem você estar olhando: avisa
+                long = now - t.work_since >= 8
+                self.set_state(t, "attn" if long and not self.looking_at(t) else "idle")
+        cur = self.current()
+        if cur and hasattr(self, "snip_state"):
+            self.snip_state.set_text(cur.title + "   " + STATE_TEXT[cur.state] + (" · " + cur.topic if cur.topic else ""))
+        return True
+
+    def spin_tick(self):
+        self.spin = (self.spin + 1) % len(SPIN)
+        for t in self.terms():
+            want = SPIN[self.spin] if t.state == "working" else "●"
+            for dot in (getattr(t, "dot", None), t.row_dot):
+                if dot is not None and dot.get_text() != want:
+                    dot.set_text(want)
+        return True
+
+    def on_bell(self, term):
+        # O sino é o único aviso explícito de agente que atravessa o tmux.
+        if not self.looking_at(term):
+            self.set_state(term, "attn")
+
+    def on_title(self, term):
+        t = (term.get_window_title() or "").strip()
+        term.topic = t[:60]
+        self.paint_term(term)
+
+    def feed(self, text):
+        t = self.current()
+        if not t or not text:
+            return
+        data = text.encode()
+        try:
+            t.feed_child(data)
+        except TypeError:
+            t.feed_child(text, len(data))
+        t.grab_focus()
+
+    # ---------- teclas ----------
+    def apply_font(self, term):
+        term.set_font(Pango.FontDescription("JetBrains Mono, monospace %d" % self.font_size))
+
+    def set_font(self, delta):
+        self.font_size = max(6, min(28, self.font_size + delta))
+        for t in self.terms():
+            self.apply_font(t)
+
+    def on_term_button(self, term, ev):
+        # Com o mouse do tmux ligado o clique direito é dele; Ctrl+clique direito abre este menu.
+        if ev.button != 3 or not (ev.state & Gdk.ModifierType.CONTROL_MASK):
+            return False
+        m = Gtk.Menu()
+        for text, fn in (("copiar", lambda *_: term.copy_clipboard_format(Vte.Format.TEXT)),
+                         ("colar", lambda *_: term.paste_clipboard()),
+                         ("fechar aba (tmux continua)", lambda *_: self.close_tab(term))):
+            it = Gtk.MenuItem(label=text)
+            it.connect("activate", fn)
+            m.append(it)
+        m.show_all()
+        m.popup_at_pointer(ev)
+        return True
+
+    def on_term_key(self, term, ev):
+        term.last_key = time.monotonic()
+        ctrl = ev.state & Gdk.ModifierType.CONTROL_MASK
+        shift = ev.state & Gdk.ModifierType.SHIFT_MASK
+        k = Gdk.keyval_name(ev.keyval) or ""
+        if ctrl and shift and k.lower() == "c":
+            term.copy_clipboard_format(Vte.Format.TEXT)
+            return True
+        if ctrl and shift and k.lower() == "v":
+            term.paste_clipboard()
+            return True
+        if shift and k == "Insert":
+            term.paste_primary()
+            return True
+        return False
+
+    def on_key(self, _w, ev):
+        ctrl = ev.state & Gdk.ModifierType.CONTROL_MASK
+        shift = ev.state & Gdk.ModifierType.SHIFT_MASK
+        alt = ev.state & Gdk.ModifierType.MOD1_MASK
+        k = Gdk.keyval_name(ev.keyval) or ""
+        n = self.nb.get_n_pages()
+        if ctrl and k in ("Page_Up", "Page_Down") and n:
+            self.nb.set_current_page((self.nb.get_current_page() + (1 if k == "Page_Down" else -1)) % n)
+            self.show_tabs()
+            return True
+        if alt and not ctrl and k in "123456789" and len(k) == 1 and int(k) <= n:
+            self.nb.set_current_page(int(k) - 1)
+            self.show_tabs()
+            return True
+        if ctrl and shift and k.lower() in ("t", "k"):
+            self.show_home()
+            return True
+        if ctrl and shift and k.lower() == "h":
+            self.show_tabs() if not self.on_tabs() else self.show_home()
+            return True
+        if ctrl and shift and k.lower() == "w":
+            t = self.current()
+            if t and self.on_tabs():
+                self.close_tab(t)
+            return True
+        if ctrl and k in ("plus", "equal", "KP_Add"):
+            self.set_font(1)
+            return True
+        if ctrl and k in ("minus", "KP_Subtract"):
+            self.set_font(-1)
+            return True
+        if k == "F11":
+            (self.unfullscreen if getattr(self, "_fs", False) else self.fullscreen)()
+            self._fs = not getattr(self, "_fs", False)
+            return True
+        if k == "Escape" and not self.on_tabs() and n:
+            self.search.set_text("")
+            self.show_tabs()
+            return True
+        return False
+
+    # ---------- abrir por fora (casca-gui --open HOST[:AGENTE]) ----------
+    def do_open(self, specs):
+        for spec in specs:
+            name, _, agent = spec.partition(":")
+            agent = agent or (self.cfg["agents"][0]["name"] if self.cfg["agents"] else "shell")
+            for idx, h in enumerate(self.cfg["hosts"]):
+                if name.lower() in (h.get("name", "").lower(), h.get("target", "").lower(), str(idx)):
+                    self.open_agent(idx, agent)
+                    break
+            else:
+                print("host desconhecido:", name, file=sys.stderr)
+        self.present()
+
+    def serve(self):
+        """Uma janela só: um segundo casca-gui entrega o pedido aqui e sai."""
+        try:
+            if os.path.exists(SOCK):
+                os.unlink(SOCK)
+            srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            srv.bind(SOCK)
+            os.chmod(SOCK, 0o600)
+            srv.listen(4)
+        except OSError as e:
+            print("socket:", e, file=sys.stderr)
+            return
+        self._srv = srv
+
+        def accept(*_):
+            try:
+                c, _a = srv.accept()
+                c.settimeout(1)
+                data = c.recv(8192)
+                c.close()
+                self.do_open(json.loads(data.decode() or "[]"))
+            except Exception as e:
+                print("pedido:", e, file=sys.stderr)
+            return True
+        GLib.io_add_watch(srv.fileno(), GLib.IO_IN, accept)
+
+    def on_quit(self, *_):
+        try:
+            w, h = self.get_size()
+            json.dump({"font": self.font_size, "w": w, "h": h}, open(STATE, "w"))
+        except Exception:
+            pass
+        try:
+            os.unlink(SOCK)
+        except OSError:
+            pass
+        Gtk.main_quit()
+        return False
+
+
+def hand_over(specs):
+    """Se já existe uma janela, manda ela abrir e devolve True."""
+    try:
+        c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        c.settimeout(2)
+        c.connect(SOCK)
+        c.sendall(json.dumps(specs).encode())
+        c.close()
+        return True
+    except OSError:
+        return False
+
+
+def main():
+    args = sys.argv[1:]
+    specs = [args[i + 1] for i, a in enumerate(args) if a == "--open" and i + 1 < len(args)]
+    if hand_over(specs):
+        return 0
+    if not CASCA:
+        d = Gtk.MessageDialog(message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.CLOSE,
+                              text="não achei o binário casca (esperado em ~/.local/bin/casca)")
+        d.run()
+        return 1
+    if not os.path.exists(CONF):
+        subprocess.run([CASCA, "init", "-conf", CONF], capture_output=True)
+    app = App()
+    app.serve()
+    if specs:
+        app.do_open(specs)
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

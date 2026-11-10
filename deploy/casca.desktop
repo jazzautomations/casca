@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=casca
+GenericName=Terminais e agentes em outros hosts
+Comment=Abre shells e agentes de código em outros hosts por ssh + tmux
+Exec=casca-gui
+Icon=utilities-terminal
+Terminal=false
+Categories=Network;System;TerminalEmulator;
+StartupNotify=false

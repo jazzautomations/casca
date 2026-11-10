@@ -1,0 +1,7 @@
+#!/bin/sh
+# runit service (modelo; install.sh troca @USER@ e @HOME@): /etc/sv/casca/run  (ln -s /etc/sv/casca /etc/service/casca)
+# Roda como o usuário dono das chaves ssh, não como root.
+exec 2>&1
+export HOME=@HOME@ USER=@USER@ LOGNAME=@USER@
+cd "$HOME"
+exec chpst -u @USER@:@USER@ @HOME@/.local/bin/casca serve

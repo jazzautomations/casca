@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0d1117">
+<title>casca</title>
+<link rel="stylesheet" href="/vendor/xterm.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="login" class="hidden">
+  <form method="POST" action="/login">
+    <h1>casca</h1>
+    <input type="password" name="token" placeholder="token" autocomplete="current-password" autofocus>
+    <button type="submit">entrar</button>
+    <p id="login-bad" class="hidden">token errado</p>
+    <p class="hint">o token aparece com <code>casca url</code> na máquina onde o casca roda</p>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <header id="topbar">
+    <button id="hamburger" title="hosts" aria-label="hosts">&#9776;</button>
+    <div id="tabs"></div>
+    <div class="topbar-actions">
+      <button id="btn-keys" title="teclas extras">&#9000;</button>
+      <button id="btn-font-dn" title="fonte menor">A&minus;</button>
+      <button id="btn-font-up" title="fonte maior">A+</button>
+      <button id="btn-split" title="lado a lado">&#9707;</button>
+      <button id="btn-broadcast" title="digitar em todas as abas">&#8767;</button>
+      <button id="btn-palette" title="buscar (Alt+K)">&#8981;</button>
+    </div>
+  </header>
+  <div id="offline" class="hidden">sem conexão com o casca — reconectando…</div>
+
+  <div id="main">
+    <aside id="sidebar">
+      <div class="side-head">
+        <input id="host-filter" type="search" placeholder="hosts…" autocomplete="off">
+      </div>
+      <div id="host-list"></div>
+      <button id="btn-add-host">+ host</button>
+    </aside>
+    <div id="terms">
+      <div id="empty">
+        <h2>casca</h2>
+        <p>Escolha um host pra abrir um shell ou um agente.</p>
+        <p class="hint">Os agentes rodam em tmux no host: fechar a aba ou perder a rede não mata nada.</p>
+      </div>
+    </div>
+  </div>
+
+  <footer id="bottom">
+    <div id="keys" class="hidden"></div>
+    <div id="snippets"></div>
+  </footer>
+
+  <div id="scrim" class="hidden"></div>
+  <div id="palette" class="hidden">
+    <input id="palette-input" type="text" placeholder="aba, host, agente ou snippet…" autocomplete="off">
+    <div id="palette-list"></div>
+  </div>
+  <div id="sheet" class="hidden"></div>
+  <div id="toast" class="hidden"></div>
+  <input id="file-input" type="file" class="hidden">
+</div>
+
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

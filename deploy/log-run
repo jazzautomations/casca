@@ -1,0 +1,4 @@
+#!/bin/sh
+# /etc/sv/casca/log/run
+mkdir -p /var/log/casca
+exec svlogd -tt /var/log/casca
