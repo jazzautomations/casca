@@ -5,4 +5,5 @@ Página estática de https://casca.jazzautomations.com.br. Sem framework e sem b
 (mesma família visual); `casca.css` tem o pouco que é só daqui.
 
     cd site && python3 -m http.server 8080
-    npx vercel@latest deploy --prod      # projeto "casca" na Vercel
+
+Publicação: a Vercel (projeto `casca`, Root Directory = `site`) publica a cada push na `main`.
