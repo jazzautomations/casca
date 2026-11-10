@@ -1,125 +1,157 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-lang="pt">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>casca(1)</title>
-<meta name="description" content="casca - abre shells e agentes de código em outros hosts por ssh + tmux. Binário Go estático, linux/386. MIT.">
+<title>casca · um notebook de 2005 pilotando agentes de IA</title>
+<meta name="description" content="casca abre Claude Code, Codex e Devin nas suas outras máquinas, por ssh + tmux, a partir de um notebook de 2005. O WiFi pode cair: a sessão continua. Código aberto (MIT).">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#101010">
+<meta name="theme-color" content="#0b0b0c">
 <link rel="canonical" href="https://casca.jazzautomations.com.br/">
-<link rel="alternate" hreflang="pt-BR" href="https://casca.jazzautomations.com.br/">
-<link rel="alternate" hreflang="en" href="https://casca.jazzautomations.com.br/en">
 <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-<meta property="og:title" content="casca(1)">
-<meta property="og:description" content="casca - abre shells e agentes de código em outros hosts por ssh + tmux. Binário Go estático, linux/386. MIT.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Esse tijolo de 2005 está pilotando quatro agentes de IA.">
+<meta property="og:description" content="Nenhum roda nele. O casca só abre a janela pra cada um — e o WiFi pode cair à vontade.">
+<meta property="og:url" content="https://casca.jazzautomations.com.br/">
 <meta property="og:image" content="https://casca.jazzautomations.com.br/assets/screenshot.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <link rel="stylesheet" href="/site.css">
+<script src="/site.js" defer></script>
 </head>
 <body>
-<header><span>CASCA(1)</span><span>Comandos do usuário</span><span>CASCA(1)</span></header>
-<h1>casca(1)</h1>
+<div class="wrap">
+  <header class="top">
+    <a class="name" href="/">casca</a>
+    <a class="hide-s" href="#como"><span data-l="pt">como assim?</span><span data-l="en" lang="en">wait, what?</span></a>
+    <a class="hide-s" href="#rodar"><span data-l="pt">rodar</span><span data-l="en" lang="en">run it</span></a>
+    <a href="https://github.com/jazzautomations/casca">GitHub</a>
+    <button type="button" id="lang" aria-label="Mudar idioma / Switch language">PT / EN</button>
+  </header>
 
-<h2>NOME</h2>
-<p>casca - abre shells e agentes de código em outros hosts por ssh + tmux</p>
+  <main>
+  <div class="hero">
+    <p class="tag">DELL LATITUDE D610 · 2005 · PENTIUM M · 2 GB</p>
+    <h1>
+      <span data-l="pt">Esse tijolo de 2005 está pilotando <span class="g">quatro agentes de IA.</span></span>
+      <span data-l="en" lang="en">This 2005 brick is flying <span class="g">four AI agents.</span></span>
+    </h1>
+    <p class="lede">
+      <span data-l="pt">Nenhum roda nele. Eles rodam nas máquinas fortes; o <b>casca</b> só abre uma janela pra cada um. Pode fechar a tampa. Pode cair o WiFi. <b>Ninguém morre.</b></span>
+      <span data-l="en" lang="en">None of them runs on it. They run on the strong machines; <b>casca</b> just opens a window onto each. Close the lid. Lose the WiFi. <b>Nobody dies.</b></span>
+    </p>
+    <div class="cta">
+      <button class="btn kill" type="button" id="kill"><span class="wifi" aria-hidden="true"></span><span id="kill-label"><span data-l="pt">Derrubar o WiFi</span><span data-l="en" lang="en">Kill the WiFi</span></span></button>
+      <a class="btn" href="https://github.com/jazzautomations/casca">GitHub ↗</a>
+    </div>
+  </div>
 
-<h2>SINOPSE</h2>
-<pre><b>casca tui</b>
-<b>casca connect</b> [<b>-agent</b> <u>nome</u> | <b>-attach</b> <u>sessão</u> | <b>-cmd</b> <u>comando</u>] [<b>-name</b> <u>sessão</u>] [<b>-dir</b> <u>pasta</u>] <u>host</u>
-<b>casca ls</b> <u>host</u>
-<b>casca kill</b> <u>host</u> <u>sessão</u>
-<b>casca status</b>
-<b>casca serve</b> [<b>-listen</b> <u>endereços</u>]
-<b>casca init</b> | <b>url</b> | <b>version</b>
-<b>casca-gui</b> [<b>--open</b> <u>host</u>[:<u>agente</u>]]...</pre>
+  <div class="stage">
+    <div class="win" id="win" aria-label="Imitação da janela do casca">
+      <div class="win-bar"><b>casca</b><span class="crumb" id="crumb">desktop · claude</span><span class="net"><span class="dot"></span><span id="net-label">rede</span></span></div>
+      <div class="win-body">
+        <div class="side">
+          <h3>Hosts</h3>
+          <div class="host" id="h0"><span class="dot"></span>desktop<span class="n">1</span></div>
+          <button class="sess" type="button" id="s-c1"><span class="st">○</span><span class="mk claude">✻</span><span class="ti"></span><span class="age"></span></button>
+          <div class="host" id="h1"><span class="dot"></span>servidor<span class="n">2</span></div>
+          <button class="sess" type="button" id="s-x1"><span class="st">○</span><span class="mk codex">⬡</span><span class="ti"></span><span class="age"></span></button>
+          <button class="sess" type="button" id="s-d1"><span class="st">○</span><span class="mk devin">◆</span><span class="ti"></span><span class="age"></span></button>
+          <div class="host" id="h2"><span class="dot"></span>gpu<span class="n">1</span></div>
+          <button class="sess" type="button" id="s-c2"><span class="st">○</span><span class="mk claude">✻</span><span class="ti"></span><span class="age"></span></button>
+        </div>
+        <div class="pane">
+          <div class="tabs"><div class="tab" id="tab"><span class="st">●</span><span class="mk claude">✻</span><span class="ti"></span></div></div>
+          <div class="term" id="term" aria-live="off"></div>
+          <div class="foot"><span>tmux ls</span><span>git status</span><span id="foot-state"></span></div>
+        </div>
+      </div>
+    </div>
+    <p class="note">
+      <span data-l="pt">Isto é uma imitação da janela, rodando no seu navegador com sessões de mentira. Clica nas sessões da lateral. Depois derruba o WiFi e vê o que acontece com o agente.</span>
+      <span data-l="en" lang="en">This is an imitation of the window, running in your browser with pretend sessions. Click the sessions in the sidebar. Then kill the WiFi and watch what happens to the agent.</span>
+    </p>
+  </div>
 
-<h2>DESCRIÇÃO</h2>
-<p><b>casca</b> conecta num host por <b>ssh</b>(1), cria ou reanexa uma sessão <b>tmux</b>(1) lá e entrega o terminal. O agente (claude, codex, devin ou qualquer comando) roda no host, dentro do tmux. O casca só transporta o terminal.</p>
-<p>Fechar o casca, desligar a máquina local ou perder a rede não encerra a sessão remota. Quando o ssh cai, o casca tenta de novo após 1, 2, 4, 8 e 15 segundos, e continua a cada 15 segundos sem limite. Ao voltar, ele reanexa a sessão existente. Ele não cria uma sessão nova nem relança o agente numa reconexão. Erro de autenticação não é repetido.</p>
-<p>Numa sessão nova, o casca abre o shell de login do usuário no tmux e digita o comando do agente nele. O agente herda o <b>PATH</b> e os arquivos rc do usuário, e sair do agente deixa um shell.</p>
-<p>O casca foi escrito para um Dell Latitude D610 (Pentium M de 32 bits, 2 GB de RAM), onde os agentes não rodam. O binário é estático, sem dependências, com 6,3 MB em linux/386.</p>
+  <section id="como">
+    <h2><span data-l="pt">Como assim?</span><span data-l="en" lang="en">Wait, what?</span></h2>
+    <div class="beats">
+      <div class="beat">
+        <span class="no">01</span>
+        <h3><span data-l="pt">O agente fica onde tem máquina.</span><span data-l="en" lang="en">The agent lives where the horsepower is.</span></h3>
+        <div>
+          <p data-l="pt">Claude Code, Codex, Devin: nenhum roda num Pentium M de 32 bits. Então eles ficam no desktop, no servidor, onde couber. O casca entra por <code>ssh</code> e abre um <code>tmux</code> lá.</p>
+          <p data-l="en" lang="en">Claude Code, Codex, Devin: none of them runs on a 32-bit Pentium M. So they stay on the desktop, the server, wherever they fit. casca gets in over <code>ssh</code> and opens a <code>tmux</code> there.</p>
+          <div class="flow" aria-hidden="true">tijolo ──ssh──▶ servidor ▸ tmux ▸ claude</div>
+        </div>
+      </div>
+      <div class="beat">
+        <span class="no">02</span>
+        <h3><span data-l="pt">A sessão não é sua. É do tmux.</span><span data-l="en" lang="en">The session isn't yours. It's tmux's.</span></h3>
+        <div>
+          <p data-l="pt">Fechou a janela, acabou a bateria, o WiFi do Dell sumiu por cinco minutos: o agente nem fica sabendo. Quando a rede volta, o casca tenta de novo em 1, 2, 4, 8, 15 segundos, pra sempre, e reanexa.</p>
+          <p data-l="pt">Ele nunca relança o agente por conta própria. Se o que está lá é um Claude no meio de uma tarefa, é nesse Claude que você cai.</p>
+          <p data-l="en" lang="en">Window closed, battery dead, the Dell's WiFi gone for five minutes: the agent never finds out. When the network is back, casca retries after 1, 2, 4, 8, 15 seconds, forever, and reattaches.</p>
+          <p data-l="en" lang="en">It never relaunches the agent on its own. If what's there is a Claude halfway through a task, that Claude is where you land.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <span class="no">03</span>
+        <h3><span data-l="pt">Dá pra ver quem está trabalhando.</span><span data-l="en" lang="en">You can see who's working.</span></h3>
+        <div>
+          <p data-l="pt">Na lateral, cada máquina e o que está vivo nela, tenha você aberto ou não. Girando: está saindo texto. Verde: parou e você ainda não olhou.</p>
+          <p data-l="en" lang="en">In the sidebar: each machine and what's alive on it, whether you opened it or not. Spinning: text is coming out. Green: it stopped and you haven't looked yet.</p>
+        </div>
+      </div>
+      <div class="beat">
+        <span class="no">04</span>
+        <h3><span data-l="pt">Nada novo pra confiar.</span><span data-l="en" lang="en">Nothing new to trust.</span></h3>
+        <div>
+          <p data-l="pt">Sem conta. Sem nuvem. Sem cofre de senha. O casca chama o <code>ssh</code> que já está na máquina, com as chaves que já estão lá. A versão de navegador só escuta em <code>127.0.0.1</code> e na sua tailnet.</p>
+          <p data-l="en" lang="en">No account. No cloud. No password vault. casca calls the <code>ssh</code> already on the machine, with the keys already there. The browser version only listens on <code>127.0.0.1</code> and your tailnet.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-<h2>COMANDOS</h2>
-<dl>
-<dt>tui</dt>
-<dd>Menu no terminal: escolhe o host, depois um agente ou uma sessão viva. O detach do tmux (<b>Ctrl-b d</b>) volta ao menu.</dd>
-<dt>connect <u>host</u></dt>
-<dd>Abre uma sessão em primeiro plano, com reconexão. <b>-agent</b> usa um agente da configuração; a sessão tmux se chama <b>c-</b><u>nome</u>. <b>-attach</b> reanexa uma sessão que já existe. <b>-cmd</b> digita um comando qualquer numa sessão nova. Sem nenhum dos três, usa o primeiro agente da configuração.</dd>
-<dt>ls <u>host</u></dt>
-<dd>Lista em JSON as sessões tmux vivas no host: nome, clientes anexados, hora da última saída e comando em primeiro plano.</dd>
-<dt>kill <u>host</u> <u>sessão</u></dt>
-<dd>Encerra a sessão tmux no host. O que estiver rodando nela termina.</dd>
-<dt>status</dt>
-<dd>Testa a porta ssh de cada host e imprime, em JSON, <b>up</b>, <b>down</b> ou <b>unknown</b>.</dd>
-<dt>serve</dt>
-<dd>Interface web (xterm.js) com as mesmas sessões. Exige o token da configuração. <b>casca url</b> imprime os endereços já com o token.</dd>
-<dt>init</dt>
-<dd>Cria a configuração padrão, se não existir.</dd>
-</dl>
-<p>Em todos, <u>host</u> é o nome ou o índice do host na configuração.</p>
+  <section>
+    <h2><span data-l="pt">A ficha do tijolo.</span><span data-l="en" lang="en">The brick's spec sheet.</span></h2>
+    <div class="specs">
+      <div class="spec"><div class="v">2005</div><div class="k"><span data-l="pt">ano do notebook</span><span data-l="en" lang="en">the laptop's year</span></div></div>
+      <div class="spec"><div class="v">32 bits</div><div class="k"><span data-l="pt">Pentium M, um núcleo</span><span data-l="en" lang="en">Pentium M, one core</span></div></div>
+      <div class="spec"><div class="v">2 GB</div><div class="k"><span data-l="pt">de RAM, no total</span><span data-l="en" lang="en">of RAM, total</span></div></div>
+      <div class="spec"><div class="v g"><span data-l="pt">6,3 MB</span><span data-l="en" lang="en">6.3 MB</span></div><div class="k"><span data-l="pt">o casca inteiro, um arquivo só</span><span data-l="en" lang="en">all of casca, a single file</span></div></div>
+      <div class="spec"><div class="v g">~68 MB</div><div class="k"><span data-l="pt">de RAM com a janela aberta</span><span data-l="en" lang="en">of RAM with the window open</span></div></div>
+      <div class="spec"><div class="v g">0</div><div class="k"><span data-l="pt">contas, nuvens ou cofres</span><span data-l="en" lang="en">accounts, clouds or vaults</span></div></div>
+    </div>
+    <p class="note"><span data-l="pt">Medido no próprio Dell em novembro de 2026, com uma sessão aberta. Cada sessão a mais custa uns 7 MB e um ssh.</span><span data-l="en" lang="en">Measured on the Dell itself in November 2026, with one session open. Each extra session costs about 7 MB and one ssh.</span></p>
+  </section>
 
-<h2>JANELA</h2>
-<p><b>casca-gui</b> é uma janela GTK3 + VTE que roda <b>casca connect</b> em cada aba.</p>
-<pre class="fig" aria-hidden="true">┌────────────────────────────────────────────────────────────┐
-│ casca                  servidor · claude            –  □  × │
-├──────────────────┬─────────────────────────────────────────┤
-│ Hosts        ↻ + │ ⠹ ✻ servidor · claude  ×              + │
-│ ● notebook       ├─────────────────────────────────────────┤
-│ ● servidor     2 │ › conserte o teste que falha            │
-│   ⠹ ✻ claude  1m │ ● Bash(go test ./...)                   │
-│   ○ ◆ devin   3h │   ⎿  ok   parser   0.412s               │
-│ ● gpu            │                                         │
-│ ▸ 2 sem resposta │ tmux ls  git status   servidor · claude │
-└──────────────────┴─────────────────────────────────────────┘</pre>
-<p>A lateral lista os hosts e, sob cada um, as sessões tmux vivas nele, abertas nesta janela ou não. O ponto de cada sessão aberta gira enquanto há saída no terminal e fica verde quando a saída para sem a aba estar em foco.</p>
-<p>Atalhos: <b>Ctrl+Shift+K</b> nova sessão; <b>Alt+1</b>..<b>9</b> e <b>Ctrl+PgUp</b>/<b>PgDn</b> trocam de aba; <b>Ctrl+Shift+W</b> fecha a aba (a sessão continua no host); <b>Ctrl+Shift+C</b>/<b>V</b> copia e cola; <b>Ctrl +</b>/<b>-</b> muda a fonte; <b>F11</b> tela cheia.</p>
-<p>Requer python3-gi, gir1.2-gtk-3.0 e gir1.2-vte-2.91. No D610, a janela com uma sessão aberta usa cerca de 68 MB de RAM; cada sessão a mais, cerca de 7 MB e um processo ssh.</p>
+  <section id="rodar">
+    <h2><span data-l="pt">Põe pra rodar.</span><span data-l="en" lang="en">Run it.</span></h2>
+    <div class="run">
+      <pre id="cmds" data-copy="curl -L -o casca https://github.com/jazzautomations/casca/releases/latest/download/casca-linux-386
+chmod +x casca &amp;&amp; ./casca init
+./casca tui"><i>$ </i>curl -L -o casca https://github.com/jazzautomations/casca/releases/latest/download/casca-linux-386
+<i>$ </i>chmod +x casca &amp;&amp; ./casca init
+<i>$ </i>./casca tui</pre>
+      <div class="bar"><span><span data-l="pt">Um arquivo de 6 MB. Também tem <span class="mono">linux-amd64</span> e <span class="mono">linux-arm64</span>. Nas máquinas de destino, só <span class="mono">tmux</span>.</span><span data-l="en" lang="en">One 6 MB file. <span class="mono">linux-amd64</span> and <span class="mono">linux-arm64</span> builds too. On the target machines, just <span class="mono">tmux</span>.</span></span><button type="button" id="copy"><span data-l="pt">copiar</span><span data-l="en" lang="en">copy</span></button></div>
+    </div>
+    <p class="note">
+      <span data-l="pt"><span class="mono">casca tui</span> é o menu no terminal. A janela da imitação lá em cima é <span class="mono">gui/casca-gui</span> (GTK3). Pro celular, <span class="mono">casca serve</span>. O <a href="https://github.com/jazzautomations/casca#readme">README</a> explica os três.</span>
+      <span data-l="en" lang="en"><span class="mono">casca tui</span> is the terminal menu. The window imitated above is <span class="mono">gui/casca-gui</span> (GTK3). For your phone, <span class="mono">casca serve</span>. The <a href="https://github.com/jazzautomations/casca#readme">README</a> (in Portuguese) covers all three.</span>
+    </p>
+  </section>
+  </main>
+</div>
 
-<h2>ARQUIVOS</h2>
-<dl>
-<dt>~/.config/casca/config.json</dt>
-<dd>Token, endereços de escuta, hosts, agentes e snippets. É recarregado ao ser salvo. <b>-conf</b> <u>caminho</u> usa outro arquivo.</dd>
-</dl>
-<pre>{
-  "listen":   "127.0.0.1:7681,tailscale:7681",
-  "hosts":    [{"name": "servidor", "target": "dev@100.64.0.5", "dir": "~/proj"}],
-  "agents":   [{"name": "claude", "cmd": "claude", "tmux": true}],
-  "snippets": [{"label": "git status", "cmd": "git status\n"}]
-}</pre>
-
-<h2>AMBIENTE</h2>
-<dl>
-<dt>CASCA_SSH</dt>
-<dd>Programa usado no lugar de <b>ssh</b>.</dd>
-<dt>CASCA_CONF, CASCA_BIN</dt>
-<dd>Lidos só pelo <b>casca-gui</b>: arquivo de configuração e caminho do binário.</dd>
-</dl>
-
-<h2>SEGURANÇA</h2>
-<p>O casca não guarda senhas nem chaves. Ele executa o <b>ssh</b> do sistema, com as chaves e o known_hosts que o usuário já tem. Não há conta, sincronização ou serviço externo.</p>
-<p><b>casca serve</b> escuta em 127.0.0.1 e, com <b>tailscale:</b><u>porta</u>, no IP da tailnet. Nunca em 0.0.0.0. O acesso exige o token e a origem das requisições é conferida. O tráfego é HTTP sem TLS.</p>
-<p>Hosts que seguram a conexão até uma pessoa aprovar (Tailscale SSH em modo check) mostram o link na aba. O casca espera até 10 minutos.</p>
-
-<h2>INSTALAÇÃO</h2>
-<pre>curl -L -o casca https://github.com/jazzautomations/casca/releases/latest/download/casca-linux-386
-chmod +x casca &amp;&amp; ./casca init &amp;&amp; ./casca tui</pre>
-<p>Há binários para <b>linux-386</b>, <b>linux-amd64</b> e <b>linux-arm64</b>, com sha256sums.txt. Nos hosts de destino basta existir tmux.</p>
-<p>Do código (Go 1.22 ou mais novo):</p>
-<pre>git clone https://github.com/jazzautomations/casca &amp;&amp; cd casca &amp;&amp; go build -o casca .
-./deploy/install.sh root@HOST USUARIO     # instala noutra máquina, com a janela e um serviço runit</pre>
-
-<h2>VEJA TAMBÉM</h2>
-<p><b>ssh</b>(1), <b>tmux</b>(1), <a href="https://jazz-cli.jazzautomations.com.br">jazz</a>(1)</p>
-<p>Código: <a href="https://github.com/jazzautomations/casca">github.com/jazzautomations/casca</a><br>
-Estudos que embasaram o desenho: <a href="https://github.com/jazzautomations/casca/tree/main/docs/research">docs/research</a> (Termius, Orca, trabalhos anteriores)<br>
-<a href="/en">This page in English</a></p>
-
-<h2>LICENÇA</h2>
-<p>MIT. Jazz Automations, 2026.</p>
-
-<footer><span>casca 0.2.0</span><span>2026-11-10</span><span>CASCA(1)</span></footer>
+<footer>
+  <div class="wrap">
+    <p><span data-l="pt">Feito no mesmo Dell que o <a href="https://jazz-cli.jazzautomations.com.br">jazz-cli</a>, o agente que roda <em>dentro</em> do tijolo. Ideias roubadas com carinho do <a href="https://termius.com">Termius</a> e do <a href="https://github.com/stablyai/orca">Orca</a>.</span><span data-l="en" lang="en">Built on the same Dell as <a href="https://jazz-cli.jazzautomations.com.br">jazz-cli</a>, the agent that runs <em>inside</em> the brick. Ideas lovingly stolen from <a href="https://termius.com">Termius</a> and <a href="https://github.com/stablyai/orca">Orca</a>.</span></p>
+    <p class="r">MIT · Jazz Automations · 2026</p>
+  </div>
+</footer>
 </body>
 </html>
