@@ -104,12 +104,12 @@
 <p>Hosts that hold the connection until a person approves (Tailscale SSH in check mode) show the link in the tab. casca waits up to 10 minutes.</p>
 
 <h2>INSTALLATION</h2>
-<pre>git clone https://github.com/jazzautomations/casca &amp;&amp; cd casca
-go build -o casca . &amp;&amp; ./casca init &amp;&amp; ./casca tui</pre>
-<p>For a 32-bit machine, from another one:</p>
-<pre>CGO_ENABLED=0 GOOS=linux GOARCH=386 go build -trimpath -ldflags="-s -w" -o casca .
-./deploy/install.sh root@HOST USER        # copies it, installs the window and creates a runit service</pre>
-<p>Requires Go 1.22 or newer to build. Target hosts only need tmux.</p>
+<pre>curl -L -o casca https://github.com/jazzautomations/casca/releases/latest/download/casca-linux-386
+chmod +x casca &amp;&amp; ./casca init &amp;&amp; ./casca tui</pre>
+<p>Binaries exist for <b>linux-386</b>, <b>linux-amd64</b> and <b>linux-arm64</b>, with sha256sums.txt. Target hosts only need tmux.</p>
+<p>From source (Go 1.22 or newer):</p>
+<pre>git clone https://github.com/jazzautomations/casca &amp;&amp; cd casca &amp;&amp; go build -o casca .
+./deploy/install.sh root@HOST USER        # installs on another machine, with the window and a runit service</pre>
 
 <h2>SEE ALSO</h2>
 <p><b>ssh</b>(1), <b>tmux</b>(1), <a href="https://jazz-cli.jazzautomations.com.br">jazz</a>(1)</p>

@@ -75,7 +75,10 @@ Hosts também podem ser adicionados pela interface (`+ host`) ou no TUI (`a`).
 
 ## Instalar
 
-    go build -o casca . && ./casca init && ./casca tui
+    curl -L -o casca https://github.com/jazzautomations/casca/releases/latest/download/casca-linux-386
+    chmod +x casca && ./casca init && ./casca tui
+
+Binários: `casca-linux-386`, `casca-linux-amd64`, `casca-linux-arm64`. Do código: `go build -o casca .`
 
 Num host remoto com runit (ex.: antiX), a partir da máquina de build:
 
